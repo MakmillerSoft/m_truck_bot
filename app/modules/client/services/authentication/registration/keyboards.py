@@ -1,0 +1,61 @@
+"""
+Клавіатури для модуля реєстрації користувачів
+"""
+
+from aiogram.types import (
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
+
+
+def get_phone_keyboard() -> ReplyKeyboardMarkup:
+    """Клавіатура для отримання номера телефону"""
+    keyboard = [[KeyboardButton(text="📱 Поділитися номером", request_contact=True)]]
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard, resize_keyboard=True, one_time_keyboard=True
+    )
+
+
+def get_main_menu_inline_keyboard() -> InlineKeyboardMarkup:
+    """Інлайн головне меню клієнта (без адмін опцій)"""
+    keyboard = [
+        [InlineKeyboardButton(text="🔍 Пошук авто", callback_data="client_search")],
+        [
+            InlineKeyboardButton(text="📋 Мої збережені", callback_data="client_saved"),
+            InlineKeyboardButton(text="💬 Повідомлення", callback_data="client_messages"),
+        ],
+        [
+            InlineKeyboardButton(text="🏢 Про компанію", callback_data="client_company"),
+            InlineKeyboardButton(text="📞 Контакти", callback_data="client_contacts"),
+        ],
+        [
+            InlineKeyboardButton(text="👤 Профіль", callback_data="client_profile"),
+            InlineKeyboardButton(text="❓ Допомога", callback_data="client_help"),
+        ],
+    ]
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_registration_start_keyboard() -> InlineKeyboardMarkup:
+    """Інлайн клавіатура для початку реєстрації"""
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                text="📱 Поділитися номером", callback_data="start_registration"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="✍️ Ввести номер вручну", callback_data="manual_phone_input"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="❌ Скасувати", callback_data="cancel_registration"
+            )
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)

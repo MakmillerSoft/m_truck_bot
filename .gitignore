@@ -1,0 +1,40 @@
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+
+# Logs
+logs/
+*.log
+
+# Tests / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Byte-compiled / cache
+.build/
+.cache/
+
+# Local runtime
+*.pid
+
+# Env files (keep only example)
+.env
+.env.local
+.env.*.local
+
+# Node (if any)
+node_modules/
+
+# Note: DB files are intentionally tracked

@@ -1,0 +1,1536 @@
+"""
+Менеджер бази даних
+"""
+
+import aiosqlite
+import asyncio
+import json
+import logging
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+from app.config.settings import settings
+from .models import (
+    UserModel,
+    VehicleModel,
+    ListingModel,
+    PhotoModel,
+    SearchRequestModel,
+    SearchHistoryModel,
+    SubscriptionModel,
+)
+
+
+class DatabaseManager:
+    """Менеджер для роботи з базою даних"""
+
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or settings.database_url.replace("sqlite:///", "")
+
+    def _process_vehicle_data(self, vehicle_data: dict) -> dict:
+        """Обробити дані авто для Pydantic моделі"""
+        # Обробляємо JSON поле photos
+        if vehicle_data.get('photos'):
+            try:
+                import json
+                vehicle_data['photos'] = json.loads(vehicle_data['photos'])
+            except:
+                vehicle_data['photos'] = []
+        else:
+            vehicle_data['photos'] = []
+        
+        # Обробляємо поле status (якщо відсутнє, встановлюємо за замовчуванням)
+        if not vehicle_data.get('status'):
+            vehicle_data['status'] = 'available'
+        
+        # Обробляємо дати статусу
+        if vehicle_data.get('status_changed_at'):
+            try:
+                from datetime import datetime
+                vehicle_data['status_changed_at'] = datetime.fromisoformat(vehicle_data['status_changed_at'])
+            except:
+                vehicle_data['status_changed_at'] = None
+        
+        if vehicle_data.get('sold_at'):
+            try:
+                from datetime import datetime
+                vehicle_data['sold_at'] = datetime.fromisoformat(vehicle_data['sold_at'])
+            except:
+                vehicle_data['sold_at'] = None
+        
+        return vehicle_data
+
+    async def init_database(self):
+        """Ініціалізація бази даних та створення таблиць"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Створення таблиці користувачів
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER UNIQUE NOT NULL,
+                    username TEXT,
+                    first_name TEXT,
+                    last_name TEXT,
+                    phone TEXT,
+                    role TEXT NOT NULL DEFAULT 'buyer',
+                    is_active BOOLEAN DEFAULT 1,
+                    is_verified BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+
+            # Створення таблиці авто
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS vehicles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    brand TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    year INTEGER NOT NULL,
+                    vehicle_type TEXT NOT NULL,
+                    condition TEXT NOT NULL,
+                    status TEXT DEFAULT 'available',
+                    price REAL NOT NULL,
+                    currency TEXT DEFAULT 'USD',
+                    mileage INTEGER,
+                    engine_volume REAL,
+                    power_hp INTEGER,
+                    transmission TEXT,
+                    fuel_type TEXT,
+                    body_type TEXT,
+                    wheel_radius TEXT,
+                    load_capacity INTEGER,
+                    total_weight INTEGER,
+                    cargo_dimensions TEXT,
+                    location TEXT,
+                    description TEXT,
+                    photos TEXT DEFAULT '[]',
+                    seller_id INTEGER NOT NULL,
+                    is_active BOOLEAN DEFAULT 1,
+                    views_count INTEGER DEFAULT 0,
+                    published_at TIMESTAMP,
+                    published_in_group BOOLEAN DEFAULT 0,
+                    published_in_bot BOOLEAN DEFAULT 0,
+                    group_message_id INTEGER,
+                    bot_message_id INTEGER,
+                    vin_code TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (seller_id) REFERENCES users(id)
+                )
+            """
+            )
+
+
+            # Створення таблиці пошукових запитів
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS search_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    vehicle_type TEXT,
+                    brand TEXT,
+                    min_year INTEGER,
+                    max_year INTEGER,
+                    min_price REAL,
+                    max_price REAL,
+                    max_mileage INTEGER,
+                    location TEXT,
+                    is_saved BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """
+            )
+
+            # Створення таблиці збережених авто
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS saved_vehicles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    vehicle_id INTEGER NOT NULL,
+                    notes TEXT,
+                    category TEXT DEFAULT 'favorites',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id),
+                    UNIQUE(user_id, vehicle_id)
+                )
+            """
+            )
+
+            # Створення таблиці заявок менеджеру
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS manager_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    request_type TEXT NOT NULL,
+                    details TEXT NOT NULL,
+                    status TEXT DEFAULT 'new',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """
+            )
+
+            # Створення таблиці історії пошуків
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS search_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    search_name TEXT NOT NULL,
+                    vehicle_type TEXT,
+                    brand TEXT,
+                    min_year INTEGER,
+                    max_year INTEGER,
+                    min_price REAL,
+                    max_price REAL,
+                    max_mileage INTEGER,
+                    location TEXT,
+                    engine_type TEXT,
+                    fuel_type TEXT,
+                    load_capacity INTEGER,
+                    condition TEXT,
+                    results_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """
+            )
+
+            # Створення таблиці підписок
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    subscription_name TEXT NOT NULL,
+                    vehicle_type TEXT,
+                    brand TEXT,
+                    min_year INTEGER,
+                    max_year INTEGER,
+                    min_price REAL,
+                    max_price REAL,
+                    max_mileage INTEGER,
+                    location TEXT,
+                    engine_type TEXT,
+                    fuel_type TEXT,
+                    load_capacity INTEGER,
+                    condition TEXT,
+                    is_active BOOLEAN DEFAULT 1,
+                    last_notification TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """
+            )
+
+            # Додаємо колонку photos якщо її немає
+            try:
+                # Перевіряємо, чи існує колонка photos
+                cursor = await db.execute("PRAGMA table_info(vehicles)")
+                columns = await cursor.fetchall()
+                column_names = [col[1] for col in columns]
+                
+                if 'photos' not in column_names:
+                    await db.execute("ALTER TABLE vehicles ADD COLUMN photos TEXT DEFAULT '[]'")
+                    await db.commit()
+                    logger.info("✅ Колонка photos додана до таблиці vehicles")
+                else:
+                    logger.info("ℹ️ Колонка photos вже існує в таблиці vehicles")
+                
+                # Перевіряємо, чи існує колонка engine_type (видаляємо її)
+                if 'engine_type' in column_names:
+                    # SQLite не підтримує DROP COLUMN, тому створюємо нову таблицю
+                    await db.execute("""
+                        CREATE TABLE vehicles_new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            brand TEXT,
+                            model TEXT,
+                            year INTEGER,
+                            vehicle_type TEXT NOT NULL,
+                            condition TEXT,
+                            price REAL,
+                            currency TEXT DEFAULT 'USD',
+                            mileage INTEGER,
+                            engine_volume REAL,
+                            power_hp INTEGER,
+                            transmission TEXT,
+                            fuel_type TEXT,
+                            body_type TEXT,
+                            wheel_radius TEXT,
+                            load_capacity INTEGER,
+                            total_weight INTEGER,
+                            cargo_dimensions TEXT,
+                            location TEXT,
+                            description TEXT,
+                            photos TEXT DEFAULT '[]',
+                            seller_id INTEGER,
+                            is_active BOOLEAN DEFAULT 1,
+                            views_count INTEGER DEFAULT 0,
+                            published_at TIMESTAMP,
+                            published_in_group BOOLEAN DEFAULT 0,
+                            published_in_bot BOOLEAN DEFAULT 0,
+                            group_message_id INTEGER,
+                            bot_message_id INTEGER,
+                            vin_code TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (seller_id) REFERENCES users(id)
+                        )
+                    """)
+                    
+                    # Копіюємо дані без engine_type
+                    await db.execute("""
+                        INSERT INTO vehicles_new 
+                        SELECT id, brand, model, year, vehicle_type, condition, price,
+                               currency, mileage, engine_volume, power_hp, transmission,
+                               fuel_type, body_type, wheel_radius, load_capacity, total_weight,
+                               cargo_dimensions, location, description, photos, seller_id,
+                               is_active, views_count, 
+                               published_at,
+                               COALESCE(published_in_group, 0) as published_in_group,
+                               COALESCE(published_in_bot, 0) as published_in_bot,
+                               group_message_id, bot_message_id, vin_code,
+                               created_at, updated_at
+                        FROM vehicles
+                    """)
+                    
+                    # Видаляємо стару таблицю та перейменовуємо нову
+                    await db.execute("DROP TABLE vehicles")
+                    await db.execute("ALTER TABLE vehicles_new RENAME TO vehicles")
+                    await db.commit()
+                    logger.info("✅ Колонка engine_type видалена з таблиці vehicles")
+                else:
+                    logger.info("ℹ️ Колонка engine_type вже відсутня в таблиці vehicles")
+                    
+            except Exception as e:
+                logger.error(f"❌ Помилка міграції таблиці vehicles: {e}")
+            
+            # Міграція: додаємо стовпець status якщо його немає
+            try:
+                await db.execute("ALTER TABLE vehicles ADD COLUMN status TEXT DEFAULT 'available'")
+                logger.info("✅ Додано стовпець status до таблиці vehicles")
+            except Exception as e:
+                # Стовпець вже існує або інша помилка
+                logger.info(f"ℹ️ Стовпець status вже існує або помилка: {e}")
+            
+            # Міграція: додаємо стовпець status_changed_at якщо його немає
+            try:
+                await db.execute("ALTER TABLE vehicles ADD COLUMN status_changed_at TEXT")
+                logger.info("✅ Додано стовпець status_changed_at до таблиці vehicles")
+            except Exception as e:
+                logger.info(f"ℹ️ Стовпець status_changed_at вже існує або помилка: {e}")
+            
+            # Міграція: додаємо стовпець sold_at якщо його немає
+            try:
+                await db.execute("ALTER TABLE vehicles ADD COLUMN sold_at TEXT")
+                logger.info("✅ Додано стовпець sold_at до таблиці vehicles")
+            except Exception as e:
+                logger.info(f"ℹ️ Стовпець sold_at вже існує або помилка: {e}")
+            
+            # Міграція: додаємо стовпець group_message_id якщо його немає
+            try:
+                await db.execute("ALTER TABLE vehicles ADD COLUMN group_message_id INTEGER")
+                logger.info("✅ Додано стовпець group_message_id до таблиці vehicles")
+            except Exception as e:
+                logger.info(f"ℹ️ Стовпець group_message_id вже існує або помилка: {e}")
+            
+            # Міграція: додаємо стовпець bot_message_id якщо його немає
+            try:
+                await db.execute("ALTER TABLE vehicles ADD COLUMN bot_message_id INTEGER")
+                logger.info("✅ Додано стовпець bot_message_id до таблиці vehicles")
+            except Exception as e:
+                logger.info(f"ℹ️ Стовпець bot_message_id вже існує або помилка: {e}")
+            
+            await db.commit()
+
+    # Методи для роботи з користувачами
+    async def create_user(self, user: UserModel) -> int:
+        """Створити нового користувача"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO users (telegram_id, username, first_name, last_name, 
+                                 phone, role, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    user.telegram_id,
+                    user.username,
+                    user.first_name,
+                    user.last_name,
+                    user.phone,
+                    user.role,
+                    user.is_active,
+                ),
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[UserModel]:
+        """Отримати користувача за Telegram ID"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return UserModel(**dict(row)) if row else None
+
+    async def update_user(self, user_id: int, updates: Dict[str, Any]) -> bool:
+        """Оновити дані користувача"""
+        if not updates:
+            return False
+
+        updates["updated_at"] = datetime.now()
+        set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
+        values = list(updates.values()) + [user_id]
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
+            await db.commit()
+            return True
+
+    async def promote_to_admin(self, user_id: int) -> bool:
+        """Призначити користувача адміністратором"""
+        return await self.update_user(user_id, {"role": "admin"})
+
+    async def demote_from_admin(self, user_id: int) -> bool:
+        """Зняти права адміністратора"""
+        return await self.update_user(user_id, {"role": "buyer"})
+
+    async def get_admins(self) -> List[UserModel]:
+        """Отримати всіх адміністраторів"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT * FROM users 
+                WHERE role = 'admin' AND is_active = 1
+                ORDER BY created_at DESC
+            """
+            )
+            rows = await cursor.fetchall()
+            return [UserModel(**dict(row)) for row in rows]
+
+    async def get_buyers(self) -> List[UserModel]:
+        """Отримати всіх покупців"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT * FROM users 
+                WHERE role = 'buyer' AND is_active = 1
+                ORDER BY created_at DESC
+            """
+            )
+            rows = await cursor.fetchall()
+            return [UserModel(**dict(row)) for row in rows]
+
+    async def get_all_users(self) -> list:
+        """Отримати всіх користувачів"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM users ORDER BY created_at DESC"
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [UserModel(**dict(row)) for row in rows]
+
+    async def get_users(self, limit: int = 10, offset: int = 0, sort_by: str = "created_at_desc", 
+                       status_filter: str = "all") -> List[UserModel]:
+        """Отримати користувачів з пагінацією та фільтрацією"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            
+            # Формуємо WHERE умову для фільтрації
+            where_conditions = []
+            params = []
+            
+            if status_filter == "active":
+                where_conditions.append("is_active = 1")
+            elif status_filter == "blocked":
+                where_conditions.append("is_active = 0")
+            
+            where_clause = ""
+            if where_conditions:
+                where_clause = "WHERE " + " AND ".join(where_conditions)
+            
+            # Формуємо ORDER BY
+            order_by = "created_at DESC"
+            if sort_by == "created_at_asc":
+                order_by = "created_at ASC"
+            elif sort_by == "created_at_desc":
+                order_by = "created_at DESC"
+            elif sort_by == "name_asc":
+                order_by = "first_name ASC, last_name ASC"
+            elif sort_by == "name_desc":
+                order_by = "first_name DESC, last_name DESC"
+            elif sort_by == "role_asc":
+                order_by = "role ASC"
+            elif sort_by == "role_desc":
+                order_by = "role DESC"
+            
+            query = f"""
+                SELECT * FROM users 
+                {where_clause}
+                ORDER BY {order_by}
+                LIMIT ? OFFSET ?
+            """
+            
+            async with db.execute(query, params + [limit, offset]) as cursor:
+                rows = await cursor.fetchall()
+                return [UserModel(**dict(row)) for row in rows]
+
+    async def get_users_count(self, status_filter: str = "all") -> int:
+        """Отримати загальну кількість користувачів з фільтрацією"""
+        async with aiosqlite.connect(self.db_path) as db:
+            where_conditions = []
+            
+            if status_filter == "active":
+                where_conditions.append("is_active = 1")
+            elif status_filter == "blocked":
+                where_conditions.append("is_active = 0")
+            
+            where_clause = ""
+            if where_conditions:
+                where_clause = "WHERE " + " AND ".join(where_conditions)
+            
+            query = f"SELECT COUNT(*) as count FROM users {where_clause}"
+            
+            async with db.execute(query) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else 0
+
+    async def get_user_by_id(self, user_id: int) -> Optional[UserModel]:
+        """Отримати користувача за ID"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM users WHERE id = ?", (user_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return UserModel(**dict(row)) if row else None
+
+    async def block_user(self, user_id: int) -> bool:
+        """Заблокувати користувача"""
+        return await self.update_user(user_id, {"is_active": False})
+
+    async def unblock_user(self, user_id: int) -> bool:
+        """Розблокувати користувача"""
+        return await self.update_user(user_id, {"is_active": True})
+
+    async def delete_user(self, user_id: int) -> bool:
+        """Видалити користувача"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            await db.commit()
+            return True
+
+    async def search_users_by_id(self, user_id: int) -> List[UserModel]:
+        """Пошук користувача за ID"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM users WHERE id = ?", (user_id,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [UserModel(**dict(row)) for row in rows]
+
+    async def search_users_by_telegram_id(self, telegram_id: int) -> List[UserModel]:
+        """Пошук користувача за Telegram ID"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [UserModel(**dict(row)) for row in rows]
+
+    async def search_users_by_name(self, name: str) -> List[UserModel]:
+        """Пошук користувачів за іменем або прізвищем"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            search_term = f"%{name}%"
+            async with db.execute(
+                """
+                SELECT * FROM users 
+                WHERE first_name LIKE ? OR last_name LIKE ? OR username LIKE ?
+                ORDER BY created_at DESC
+                """, (search_term, search_term, search_term)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [UserModel(**dict(row)) for row in rows]
+
+    async def search_users_by_phone(self, phone: str) -> List[UserModel]:
+        """Пошук користувачів за номером телефону"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            search_term = f"%{phone}%"
+            async with db.execute(
+                "SELECT * FROM users WHERE phone LIKE ? ORDER BY created_at DESC", (search_term,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [UserModel(**dict(row)) for row in rows]
+
+    async def search_users_by_role(self, role: str) -> List[UserModel]:
+        """Пошук користувачів за роллю"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM users WHERE role = ? ORDER BY created_at DESC", (role,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [UserModel(**dict(row)) for row in rows]
+
+    async def search_users_by_username(self, username: str) -> List[UserModel]:
+        """Пошук користувачів за username"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            search_term = f"%{username}%"
+            async with db.execute(
+                "SELECT * FROM users WHERE username LIKE ? ORDER BY created_at DESC", (search_term,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [UserModel(**dict(row)) for row in rows]
+
+    async def get_users_statistics(self) -> Dict[str, Any]:
+        """Отримати статистику користувачів"""
+        async with aiosqlite.connect(self.db_path) as db:
+            stats = {}
+            
+            # Загальна кількість користувачів
+            async with db.execute("SELECT COUNT(*) FROM users") as cursor:
+                stats['total_users'] = (await cursor.fetchone())[0]
+            
+            # Активні користувачі
+            async with db.execute("SELECT COUNT(*) FROM users WHERE is_active = 1") as cursor:
+                stats['active_users'] = (await cursor.fetchone())[0]
+            
+            # Заблоковані користувачі
+            async with db.execute("SELECT COUNT(*) FROM users WHERE is_active = 0") as cursor:
+                stats['blocked_users'] = (await cursor.fetchone())[0]
+            
+            # Користувачі по ролях
+            async with db.execute("SELECT role, COUNT(*) FROM users GROUP BY role") as cursor:
+                role_stats = await cursor.fetchall()
+                stats['users_by_role'] = {role: count for role, count in role_stats}
+            
+            return stats
+
+    # Методи для роботи з авто
+    async def create_vehicle(self, vehicle: VehicleModel) -> int:
+        """Створити новий автомобіль"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Конвертуємо photos в JSON рядок
+            photos_json = json.dumps(vehicle.photos) if vehicle.photos else "[]"
+            
+            # Підготовлюємо дані для вставки (БЕЗ engine_type!)
+            values = (
+                vehicle.brand,                    # 1
+                vehicle.model,                    # 2
+                vehicle.year,                     # 3
+                vehicle.vehicle_type.value,       # 4
+                vehicle.condition.value if vehicle.condition else None,  # 5
+                vehicle.price,                    # 6
+                vehicle.currency,                 # 7
+                vehicle.mileage,                  # 8
+                vehicle.engine_volume,            # 9
+                vehicle.power_hp,                 # 10
+                vehicle.wheel_radius,             # 11
+                vehicle.body_type,                # 12
+                vehicle.transmission,             # 13
+                vehicle.load_capacity,            # 14
+                vehicle.total_weight,             # 15
+                vehicle.cargo_dimensions,         # 16
+                vehicle.location,                 # 17
+                vehicle.description,              # 18
+                vehicle.seller_id,                # 19
+                vehicle.created_at.isoformat() if vehicle.created_at else None,   # 20
+                vehicle.updated_at.isoformat() if vehicle.updated_at else None,   # 21
+                vehicle.fuel_type,                # 22
+                vehicle.is_active,                # 23
+                vehicle.views_count,              # 24
+                vehicle.published_at.isoformat() if vehicle.published_at else None,  # 25 published_at
+                vehicle.published_in_group,       # 26 published_in_group
+                vehicle.published_in_bot,         # 27 published_in_bot
+                vehicle.group_message_id,         # 28 group_message_id
+                vehicle.bot_message_id,           # 29 bot_message_id
+                photos_json,                      # 30 photos
+                vehicle.vin_code,                 # 31 vin_code
+            )
+            
+            logger.info(f"📊 create_vehicle: передаємо {len(values)} значень")
+            logger.info(f"📊 create_vehicle: photos_json = {photos_json}")
+            
+            cursor = await db.execute(
+                """
+                INSERT INTO vehicles (brand, model, year, vehicle_type, condition, price,
+                                    currency, mileage, engine_volume, power_hp, wheel_radius,
+                                    body_type, transmission, load_capacity, total_weight,
+                                    cargo_dimensions, location, description,
+                                    seller_id, created_at, updated_at, fuel_type, is_active,
+                                    views_count, published_at,
+                                    published_in_group, published_in_bot, group_message_id,
+                                    bot_message_id, photos, vin_code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                values,
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_vehicles(
+        self, limit: int = 20, offset: int = 0, sort_by: str = "created_at_desc"
+    ) -> List[VehicleModel]:
+        """Отримати список авто з можливістю сортування"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            
+            # Визначаємо порядок сортування
+            order_clause = "ORDER BY created_at DESC"  # За замовчуванням
+            if sort_by == "created_at_asc":
+                order_clause = "ORDER BY created_at ASC"
+            elif sort_by == "created_at_desc":
+                order_clause = "ORDER BY created_at DESC"
+            elif sort_by == "price_asc":
+                order_clause = "ORDER BY price ASC"
+            elif sort_by == "price_desc":
+                order_clause = "ORDER BY price DESC"
+            elif sort_by == "year_asc":
+                order_clause = "ORDER BY year ASC"
+            elif sort_by == "year_desc":
+                order_clause = "ORDER BY year DESC"
+            elif sort_by == "brand_asc":
+                order_clause = "ORDER BY brand ASC"
+            elif sort_by == "brand_desc":
+                order_clause = "ORDER BY brand DESC"
+            
+            async with db.execute(
+                f"""
+                SELECT * FROM vehicles 
+                WHERE is_active = 1
+                {order_clause}
+                LIMIT ? OFFSET ?
+            """,
+                (limit, offset),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                vehicles = []
+                for row in rows:
+                    vehicle_data = self._process_vehicle_data(dict(row))
+                    vehicles.append(VehicleModel(**vehicle_data))
+                return vehicles
+
+    async def search_vehicles_by_name(self, query: str) -> List[VehicleModel]:
+        """Пошук авто за назвою (бренд або модель)"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            search_term = f"%{query.lower()}%"
+            async with db.execute(
+                """
+                SELECT * FROM vehicles 
+                WHERE is_active = 1 
+                AND (LOWER(brand) LIKE ? OR LOWER(model) LIKE ?)
+                ORDER BY created_at DESC
+            """,
+                (search_term, search_term),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    async def get_vehicle_by_id(self, vehicle_id: int) -> Optional[VehicleModel]:
+        """Отримати авто за ID"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE id = ?", (vehicle_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return VehicleModel(**self._process_vehicle_data(dict(row))) if row else None
+
+    async def get_vehicle_by_id_from_message_id(self, message_id: int) -> Optional[VehicleModel]:
+        """Отримати авто за group_message_id"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE group_message_id = ?", (message_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return VehicleModel(**self._process_vehicle_data(dict(row))) if row else None
+
+    async def search_vehicles(self, filters: Dict[str, Any]) -> List[VehicleModel]:
+        """Пошук авто за фільтрами"""
+        where_conditions = []
+        params = []
+
+        for key, value in filters.items():
+            if value is not None:
+                if key in ["min_price"]:
+                    where_conditions.append("price >= ?")
+                    params.append(value)
+                elif key in ["max_price"]:
+                    where_conditions.append("price <= ?")
+                    params.append(value)
+                elif key in ["min_year"]:
+                    where_conditions.append("year >= ?")
+                    params.append(value)
+                elif key in ["max_year"]:
+                    where_conditions.append("year <= ?")
+                    params.append(value)
+                elif key in ["max_mileage"]:
+                    where_conditions.append("mileage <= ?")
+                    params.append(value)
+                elif key in ["min_load_capacity"]:
+                    where_conditions.append("load_capacity >= ?")
+                    params.append(value)
+                elif key in ["max_load_capacity"]:
+                    where_conditions.append("load_capacity <= ?")
+                    params.append(value)
+                elif key in ["brand"]:
+                    where_conditions.append("LOWER(brand) LIKE LOWER(?)")
+                    params.append(f"%{value}%")
+                elif key in ["location"]:
+                    where_conditions.append("LOWER(location) LIKE LOWER(?)")
+                    params.append(f"%{value}%")
+                elif key in ["engine_type"]:
+                    where_conditions.append("LOWER(engine_type) LIKE LOWER(?)")
+                    params.append(f"%{value}%")
+                elif key in ["fuel_type"]:
+                    where_conditions.append("LOWER(fuel_type) LIKE LOWER(?)")
+                    params.append(f"%{value}%")
+                elif key in ["condition"]:
+                    where_conditions.append("condition = ?")
+                    params.append(value)
+                elif key in ["vehicle_type"]:
+                    where_conditions.append("vehicle_type = ?")
+                    params.append(value)
+                elif key == "sort_by":
+                    continue  # Обробляємо сортування окремо
+                else:
+                    where_conditions.append(f"{key} = ?")
+                    params.append(value)
+
+        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+
+        # Визначаємо сортування
+        sort_by = filters.get("sort_by", "created_at_desc")
+        order_clause = self._get_sort_clause(sort_by)
+
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                f"""
+                SELECT * FROM vehicles 
+                WHERE {where_clause}
+                ORDER BY {order_clause}
+            """,
+                params,
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    def _get_sort_clause(self, sort_by: str) -> str:
+        """Отримати SQL для сортування"""
+        sort_mapping = {
+            "price_asc": "price ASC",
+            "price_desc": "price DESC",
+            "year_asc": "year ASC",
+            "year_desc": "year DESC",
+            "mileage_asc": "mileage ASC",
+            "mileage_desc": "mileage DESC",
+            "date_desc": "created_at DESC",
+            "date_asc": "created_at ASC",
+        }
+        return sort_mapping.get(sort_by, "created_at DESC")
+
+    # ===== Збережені авто =====
+
+    async def save_vehicle(
+        self, user_id: int, vehicle_id: int, notes: str = None
+    ) -> int:
+        """Зберегти авто для покупця"""
+        from .models import SavedVehicleModel
+
+        # Перевіряємо чи вже збережено
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                """
+                SELECT id FROM saved_vehicles 
+                WHERE user_id = ? AND vehicle_id = ?
+            """,
+                (user_id, vehicle_id),
+            ) as cursor:
+                existing = await cursor.fetchone()
+                if existing:
+                    return existing[0]  # Вже збережено
+
+        # Зберігаємо нове
+        saved_vehicle = SavedVehicleModel(
+            user_id=user_id, vehicle_id=vehicle_id, notes=notes
+        )
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO saved_vehicles 
+                (user_id, vehicle_id, notes, created_at)
+                VALUES (?, ?, ?, ?)
+            """,
+                (
+                    saved_vehicle.user_id,
+                    saved_vehicle.vehicle_id,
+                    saved_vehicle.notes,
+                    saved_vehicle.created_at.isoformat(),
+                ),
+            )
+            await db.commit()
+
+            # Отримуємо ID нового запису
+            async with db.execute("SELECT last_insert_rowid()") as cursor:
+                result = await cursor.fetchone()
+                return result[0]
+
+    async def remove_saved_vehicle(self, user_id: int, vehicle_id: int) -> bool:
+        """Видалити авто з збережених"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                DELETE FROM saved_vehicles 
+                WHERE user_id = ? AND vehicle_id = ?
+            """,
+                (user_id, vehicle_id),
+            )
+            await db.commit()
+            return True
+
+    async def get_saved_vehicles(self, user_id: int) -> list:
+        """Отримати всі збережені авто покупця"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT v.*, sv.notes, sv.created_at as saved_at
+                FROM saved_vehicles sv
+                JOIN vehicles v ON sv.vehicle_id = v.id
+                WHERE sv.user_id = ?
+                ORDER BY sv.created_at DESC
+            """,
+                (user_id,),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def is_vehicle_saved(self, user_id: int, vehicle_id: int) -> bool:
+        """Перевірити чи збережено авто покупцем"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                """
+                SELECT 1 FROM saved_vehicles 
+                WHERE user_id = ? AND vehicle_id = ?
+            """,
+                (user_id, vehicle_id),
+            ) as cursor:
+                result = await cursor.fetchone()
+                return result is not None
+
+    async def update_saved_vehicle_notes(
+        self, user_id: int, vehicle_id: int, notes: str = None
+    ) -> bool:
+        """Оновити нотатки до збереженого авто"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE saved_vehicles 
+                SET notes = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ? AND vehicle_id = ?
+            """,
+                (notes, user_id, vehicle_id),
+            )
+            await db.commit()
+            return True
+
+    async def update_saved_vehicle_category(
+        self, user_id: int, vehicle_id: int, category: str
+    ) -> bool:
+        """Оновити категорію збереженого авто"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE saved_vehicles 
+                SET category = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ? AND vehicle_id = ?
+            """,
+                (category, user_id, vehicle_id),
+            )
+            await db.commit()
+            return True
+
+    async def get_saved_vehicles_by_category(
+        self, user_id: int, category: str = None
+    ) -> list:
+        """Отримати збережені авто за категорією"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+
+            if category:
+                query = """
+                    SELECT v.*, sv.notes, sv.category, sv.created_at as saved_at
+                    FROM saved_vehicles sv
+                    JOIN vehicles v ON sv.vehicle_id = v.id
+                    WHERE sv.user_id = ? AND sv.category = ?
+                    ORDER BY sv.created_at DESC
+                """
+                params = (user_id, category)
+            else:
+                query = """
+                    SELECT v.*, sv.notes, sv.category, sv.created_at as saved_at
+                    FROM saved_vehicles sv
+                    JOIN vehicles v ON sv.vehicle_id = v.id
+                    WHERE sv.user_id = ?
+                    ORDER BY sv.created_at DESC
+                """
+                params = (user_id,)
+
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    # ===== Заявки менеджеру =====
+
+    async def create_manager_request(
+        self, user_id: int, request_type: str, details: str
+    ) -> int:
+        """Створити заявку менеджеру"""
+        from .models import ManagerRequestModel
+
+        request = ManagerRequestModel(
+            user_id=user_id, request_type=request_type, details=details
+        )
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO manager_requests 
+                (user_id, request_type, details, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    request.user_id,
+                    request.request_type,
+                    request.details,
+                    request.status,
+                    request.created_at.isoformat(),
+                    request.updated_at.isoformat(),
+                ),
+            )
+            await db.commit()
+
+            # Отримуємо ID нового запису
+            async with db.execute("SELECT last_insert_rowid()") as cursor:
+                result = await cursor.fetchone()
+                return result[0]
+
+    async def get_manager_requests(self, user_id: int = None) -> list:
+        """Отримати заявки менеджеру"""
+        query = """
+            SELECT mr.*, u.first_name, u.last_name, u.phone
+            FROM manager_requests mr
+            JOIN users u ON mr.user_id = u.id
+        """
+        params = []
+
+        if user_id:
+            query += " WHERE mr.user_id = ?"
+            params.append(user_id)
+
+        query += " ORDER BY mr.created_at DESC"
+
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    # ===== Історія пошуків =====
+
+    async def save_search_history(
+        self, user_id: int, search_params: dict, results_count: int = 0
+    ) -> int:
+        """Зберегти пошук в історію"""
+        # Генеруємо назву пошуку на основі параметрів
+        search_name = self._generate_search_name(search_params)
+
+        search_history = SearchHistoryModel(
+            user_id=user_id,
+            search_name=search_name,
+            vehicle_type=search_params.get("vehicle_type"),
+            brand=search_params.get("brand"),
+            min_year=search_params.get("min_year"),
+            max_year=search_params.get("max_year"),
+            min_price=search_params.get("min_price"),
+            max_price=search_params.get("max_price"),
+            max_mileage=search_params.get("max_mileage"),
+            location=search_params.get("location"),
+            engine_type=search_params.get("engine_type"),
+            fuel_type=search_params.get("fuel_type"),
+            load_capacity=search_params.get("load_capacity"),
+            condition=search_params.get("condition"),
+            results_count=results_count,
+        )
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO search_history 
+                (user_id, search_name, vehicle_type, brand, min_year, max_year, 
+                 min_price, max_price, max_mileage, location, engine_type, 
+                 fuel_type, load_capacity, condition, results_count, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    search_history.user_id,
+                    search_history.search_name,
+                    search_history.vehicle_type,
+                    search_history.brand,
+                    search_history.min_year,
+                    search_history.max_year,
+                    search_history.min_price,
+                    search_history.max_price,
+                    search_history.max_mileage,
+                    search_history.location,
+                    search_history.engine_type,
+                    search_history.fuel_type,
+                    search_history.load_capacity,
+                    search_history.condition,
+                    search_history.results_count,
+                    search_history.created_at.isoformat(),
+                ),
+            )
+            await db.commit()
+
+            # Отримуємо ID нового запису
+            async with db.execute("SELECT last_insert_rowid()") as cursor:
+                result = await cursor.fetchone()
+                return result[0]
+
+    def _generate_search_name(self, search_params: dict) -> str:
+        """Генерує назву пошуку на основі параметрів"""
+        parts = []
+
+        if search_params.get("vehicle_type"):
+            parts.append(f"Тип: {search_params['vehicle_type']}")
+
+        if search_params.get("brand"):
+            parts.append(f"Марка: {search_params['brand']}")
+
+        if search_params.get("min_year") or search_params.get("max_year"):
+            year_range = []
+            if search_params.get("min_year"):
+                year_range.append(f"від {search_params['min_year']}")
+            if search_params.get("max_year"):
+                year_range.append(f"до {search_params['max_year']}")
+            parts.append(f"Рік: {' '.join(year_range)}")
+
+        if search_params.get("min_price") or search_params.get("max_price"):
+            price_range = []
+            if search_params.get("min_price"):
+                price_range.append(f"від ${search_params['min_price']:,.0f}")
+            if search_params.get("max_price"):
+                price_range.append(f"до ${search_params['max_price']:,.0f}")
+            parts.append(f"Ціна: {' '.join(price_range)}")
+
+        if search_params.get("location"):
+            parts.append(f"Місце: {search_params['location']}")
+
+        if not parts:
+            return "Загальний пошук"
+
+        return " | ".join(parts)
+
+    async def get_search_history(self, user_id: int, limit: int = 10) -> List[dict]:
+        """Отримати історію пошуків користувача"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM search_history 
+                WHERE user_id = ? 
+                ORDER BY created_at DESC 
+                LIMIT ?
+            """,
+                (user_id, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def delete_search_history(self, user_id: int, search_id: int = None) -> bool:
+        """Видалити пошук з історії"""
+        async with aiosqlite.connect(self.db_path) as db:
+            if search_id:
+                await db.execute(
+                    """
+                    DELETE FROM search_history 
+                    WHERE user_id = ? AND id = ?
+                """,
+                    (user_id, search_id),
+                )
+            else:
+                await db.execute(
+                    """
+                    DELETE FROM search_history 
+                    WHERE user_id = ?
+                """,
+                    (user_id,),
+                )
+            await db.commit()
+            return True
+
+    # ===== Підписки =====
+
+    async def create_subscription(
+        self, user_id: int, subscription_name: str, search_params: dict
+    ) -> int:
+        """Створити підписку на сповіщення"""
+        subscription = SubscriptionModel(
+            user_id=user_id,
+            subscription_name=subscription_name,
+            vehicle_type=search_params.get("vehicle_type"),
+            brand=search_params.get("brand"),
+            min_year=search_params.get("min_year"),
+            max_year=search_params.get("max_year"),
+            min_price=search_params.get("min_price"),
+            max_price=search_params.get("max_price"),
+            max_mileage=search_params.get("max_mileage"),
+            location=search_params.get("location"),
+            engine_type=search_params.get("engine_type"),
+            fuel_type=search_params.get("fuel_type"),
+            load_capacity=search_params.get("load_capacity"),
+            condition=search_params.get("condition"),
+        )
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO subscriptions 
+                (user_id, subscription_name, vehicle_type, brand, min_year, max_year, 
+                 min_price, max_price, max_mileage, location, engine_type, 
+                 fuel_type, load_capacity, condition, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    subscription.user_id,
+                    subscription.subscription_name,
+                    subscription.vehicle_type,
+                    subscription.brand,
+                    subscription.min_year,
+                    subscription.max_year,
+                    subscription.min_price,
+                    subscription.max_price,
+                    subscription.max_mileage,
+                    subscription.location,
+                    subscription.engine_type,
+                    subscription.fuel_type,
+                    subscription.load_capacity,
+                    subscription.condition,
+                    subscription.is_active,
+                    subscription.created_at.isoformat(),
+                    subscription.updated_at.isoformat(),
+                ),
+            )
+            await db.commit()
+
+            # Отримуємо ID нового запису
+            async with db.execute("SELECT last_insert_rowid()") as cursor:
+                result = await cursor.fetchone()
+                return result[0]
+
+    async def get_user_subscriptions(self, user_id: int) -> List[dict]:
+        """Отримати підписки користувача"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM subscriptions 
+                WHERE user_id = ? 
+                ORDER BY created_at DESC
+            """,
+                (user_id,),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def update_subscription_status(
+        self, subscription_id: int, is_active: bool
+    ) -> bool:
+        """Оновити статус підписки"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE subscriptions 
+                SET is_active = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """,
+                (is_active, subscription_id),
+            )
+            await db.commit()
+            return True
+
+    async def delete_subscription(self, user_id: int, subscription_id: int) -> bool:
+        """Видалити підписку"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                DELETE FROM subscriptions 
+                WHERE user_id = ? AND id = ?
+            """,
+                (user_id, subscription_id),
+            )
+            await db.commit()
+            return True
+
+    async def get_active_subscriptions(self) -> List[dict]:
+        """Отримати всі активні підписки (для перевірки нових авто)"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM subscriptions 
+                WHERE is_active = 1
+                ORDER BY created_at DESC
+            """
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    # ===== МЕТОДИ ДЛЯ РОБОТИ З ФОТО =====
+
+    async def add_photo(
+        self, vehicle_id: int, file_id: str, file_path: str, is_main: bool = False
+    ) -> int:
+        """Додати фото до авто"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Якщо це головне фото, знімаємо статус головного з інших фото
+            if is_main:
+                await db.execute(
+                    """
+                    UPDATE photos SET is_main = 0 
+                    WHERE vehicle_id = ?
+                """,
+                    (vehicle_id,),
+                )
+
+            # Додаємо нове фото
+            cursor = await db.execute(
+                """
+                INSERT INTO photos (vehicle_id, file_id, file_path, is_main)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (vehicle_id, file_id, file_path, is_main),
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def update_vehicle(self, vehicle_id: int, update_data: dict) -> bool:
+        """Оновити авто"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                # Підготовлюємо SQL запит для оновлення
+                set_clauses = []
+                values = []
+                
+                for field, value in update_data.items():
+                    if field in ["vehicle_type", "condition"] and hasattr(value, 'value'):
+                        value = value.value
+                    elif field == "photos" and isinstance(value, list):
+                        value = json.dumps(value)
+                    elif field in ["created_at", "updated_at"] and hasattr(value, 'isoformat'):
+                        value = value.isoformat()
+                    
+                    set_clauses.append(f"{field} = ?")
+                    values.append(value)
+                
+                if not set_clauses:
+                    return False
+                
+                # Додаємо updated_at
+                set_clauses.append("updated_at = ?")
+                values.append(datetime.now().isoformat())
+                
+                # Додаємо vehicle_id
+                values.append(vehicle_id)
+                
+                sql = f"UPDATE vehicles SET {', '.join(set_clauses)} WHERE id = ?"
+                
+                await db.execute(sql, values)
+                await db.commit()
+                
+                return True
+                
+        except Exception as e:
+            logger.error(f"Помилка оновлення авто: {e}")
+            return False
+
+    async def get_vehicle_photos(self, vehicle_id: int) -> List[dict]:
+        """Отримати всі фото авто"""
+        # Отримуємо авто з БД
+        vehicle = await self.get_vehicle_by_id(vehicle_id)
+        if not vehicle or not vehicle.photos:
+            return []
+        
+        # Повертаємо всі фото як список словників
+        photos = []
+        for i, photo_id in enumerate(vehicle.photos):
+            photos.append({
+                "id": i + 1,
+                "vehicle_id": vehicle_id,
+                "file_id": photo_id,
+                "file_path": "",  # Не зберігаємо шлях
+                "is_main": i == 0,  # Перше фото - головне
+                "created_at": vehicle.created_at
+            })
+        
+        return photos
+
+    async def get_main_photo(self, vehicle_id: int) -> Optional[dict]:
+        """Отримати головне фото авто"""
+        # Спочатку отримуємо авто з БД
+        vehicle = await self.get_vehicle_by_id(vehicle_id)
+        if not vehicle or not vehicle.photos or len(vehicle.photos) == 0:
+            return None
+        
+        # Повертаємо перше фото як головне
+        return {
+            "file_id": vehicle.photos[0],
+            "vehicle_id": vehicle_id,
+            "is_main": True
+        }
+
+    async def delete_vehicle(self, vehicle_id: int) -> bool:
+        """Видалити авто"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Видаляємо пов'язані записи
+            await db.execute("DELETE FROM saved_vehicles WHERE vehicle_id = ?", (vehicle_id,))
+            
+            # Видаляємо авто
+            await db.execute("DELETE FROM vehicles WHERE id = ?", (vehicle_id,))
+            await db.commit()
+            return True
+
+    async def get_vehicles_by_status(self, status: str, page: int = 1, per_page: int = 10, sort_by: str = "created_at_desc") -> List[VehicleModel]:
+        """Отримати авто за статусом з пагінацією та сортуванням"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            
+            # Визначаємо порядок сортування
+            order_clause = "ORDER BY created_at DESC"
+            if sort_by == "created_at_asc":
+                order_clause = "ORDER BY created_at ASC"
+            elif sort_by == "price_desc":
+                order_clause = "ORDER BY price DESC"
+            elif sort_by == "price_asc":
+                order_clause = "ORDER BY price ASC"
+            
+            # Обчислюємо offset для пагінації
+            offset = (page - 1) * per_page
+            
+            async with db.execute(
+                f"SELECT * FROM vehicles WHERE status = ? {order_clause} LIMIT ? OFFSET ?",
+                (status, per_page, offset)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    async def get_vehicles_count_by_status(self, status: str) -> int:
+        """Отримати кількість авто за статусом"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT COUNT(*) FROM vehicles WHERE status = ?",
+                (status,)
+            ) as cursor:
+                result = await cursor.fetchone()
+                return result[0] if result else 0
+
+    async def delete_all_vehicles(self) -> int:
+        """Видалити всі авто"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Видаляємо всі пов'язані записи
+            await db.execute("DELETE FROM saved_vehicles")
+            await db.execute("DELETE FROM photos")
+            
+            # Видаляємо всі авто
+            cursor = await db.execute("DELETE FROM vehicles")
+            await db.commit()
+            return cursor.rowcount
+
+    # Методи швидкого пошуку
+    async def search_vehicles_by_vin(self, vin_code: str) -> List[VehicleModel]:
+        """Пошук авто по VIN коду"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE vin_code LIKE ?",
+                (f"%{vin_code}%",)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    async def search_vehicles_by_brand(self, brand: str) -> List[VehicleModel]:
+        """Пошук авто по марці"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE brand LIKE ?",
+                (f"%{brand}%",)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    async def search_vehicles_by_model(self, model: str) -> List[VehicleModel]:
+        """Пошук авто по моделі"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE model LIKE ?",
+                (f"%{model}%",)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    async def search_vehicles_by_years(self, year_from: int, year_to: int) -> List[VehicleModel]:
+        """Пошук авто по діапазону років"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE year >= ? AND year <= ? ORDER BY year DESC",
+                (year_from, year_to)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    async def search_vehicles_by_price_range(self, price_from: float, price_to: float) -> List[VehicleModel]:
+        """Пошук авто по діапазону цін"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE price >= ? AND price <= ? ORDER BY price ASC",
+                (price_from, price_to)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+
+# Глобальний екземпляр менеджера бази даних
+db_manager = DatabaseManager()
