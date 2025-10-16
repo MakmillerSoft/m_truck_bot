@@ -180,12 +180,18 @@ def format_admin_vehicle_card(vehicle: VehicleModel) -> Tuple[str, Optional[str]
     # Додаємо ID авто окремо внизу
     text += f"\n\n🆔 <b>ID авто:</b> {vehicle.id}"
     
-    # Отримуємо перше фото
+    # Отримуємо головне медіа (фото або відео)
     photo_file_id = None
-    if vehicle.photos and len(vehicle.photos) > 0:
+    if vehicle.main_photo:
+        photo_file_id = vehicle.main_photo
+        # Перевіряємо валідність file_id (включаючи відео з префіксом)
+        if not (photo_file_id.startswith("BAAD") or photo_file_id.startswith("AgAC") or photo_file_id.startswith("video:")):
+            photo_file_id = None
+    elif vehicle.photos and len(vehicle.photos) > 0:
+        # Fallback на перший елемент з групи якщо немає головного
         photo_file_id = vehicle.photos[0]
-        # Перевіряємо валідність file_id
-        if not (photo_file_id.startswith("BAAD") or photo_file_id.startswith("AgAC")):
+        # Перевіряємо валідність file_id (включаючи відео з префіксом)
+        if not (photo_file_id.startswith("BAAD") or photo_file_id.startswith("AgAC") or photo_file_id.startswith("video:")):
             photo_file_id = None
     
     return text, photo_file_id

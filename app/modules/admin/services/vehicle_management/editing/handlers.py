@@ -66,7 +66,8 @@ async def show_editing_menu(callback: CallbackQuery, state: FSMContext):
                 "cargo_dimensions": "Габарити вантажного відсіку",
                 "location": "Місцезнаходження",
                 "description": "Опис",
-                "photos": "Фото"
+                "photos": "Фото для групи",
+                "main_photo": "Головне фото"
             }
             field_name = field_names.get(field, field)
             changes_list.append(f"✅ <b>{field_name}:</b> {old_value} → {new_value}")
@@ -130,7 +131,9 @@ async def edit_specific_field(callback: CallbackQuery, state: FSMContext):
     field_text += f"Поточне значення: <b>{current_value}</b>\n\n"
     
     if field_name == "photos":
-        field_text += "Надішліть нові фото або напишіть 'пропустити' щоб залишити поточні:"
+        field_text += "Надішліть нові фото для групи або напишіть 'пропустити' щоб залишити поточні:"
+    elif field_name == "main_photo":
+        field_text += "Надішліть нове головне фото або напишіть 'пропустити' щоб залишити поточне:"
     else:
         field_text += f"Введіть нове значення для {display_name}:"
     
@@ -163,6 +166,7 @@ async def edit_specific_field(callback: CallbackQuery, state: FSMContext):
         "location": VehicleEditingStates.waiting_for_location_edit,
         "description": VehicleEditingStates.waiting_for_description_edit,
         "photos": VehicleEditingStates.waiting_for_photos_edit,
+        "main_photo": VehicleEditingStates.waiting_for_main_photo_edit,
     }
     
     target_state = state_mapping.get(field_name)
@@ -209,7 +213,8 @@ async def back_to_editing_menu(callback: CallbackQuery, state: FSMContext):
                 "cargo_dimensions": "Габарити вантажного відсіку",
                 "location": "Місцезнаходження",
                 "description": "Опис",
-                "photos": "Фото"
+                "photos": "Фото для групи",
+                "main_photo": "Головне фото"
             }
             field_name = field_names.get(field, field)
             changes_list.append(f"✅ <b>{field_name}:</b> {old_value} → {new_value}")
@@ -476,7 +481,8 @@ async def back_to_summary_card(callback: CallbackQuery, state: FSMContext):
                 "cargo_dimensions": "Габарити вантажного відсіку",
                 "location": "Місцезнаходження",
                 "description": "Опис",
-                "photos": "Фото"
+                "photos": "Фото для групи",
+                "main_photo": "Головне фото"
             }
             field_name = field_names.get(field, field)
             

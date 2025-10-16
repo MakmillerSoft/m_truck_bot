@@ -2,6 +2,7 @@
 Обробники для основних кроків створення авто (1-6)
 """
 import logging
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -209,12 +210,14 @@ async def process_body_type_input(message: Message, state: FSMContext):
 @router.message(VehicleCreationStates.waiting_for_year)
 async def process_year_input(message: Message, state: FSMContext):
     """Обробка введення року випуску"""
+    current_year = datetime.now().year
+    
     try:
         year = int(message.text.strip())
         
-        if year < 1900 or year > 2025:
+        if year < 1900 or year > current_year + 1:
             await message.answer(
-                "❌ Рік повинен бути в діапазоні від 1900 до 2025",
+                f"❌ Рік повинен бути в діапазоні від 1900 до {current_year + 1}",
                 reply_markup=get_year_input_keyboard()
             )
             return

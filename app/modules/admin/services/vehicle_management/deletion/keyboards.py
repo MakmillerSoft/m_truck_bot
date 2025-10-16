@@ -21,7 +21,7 @@ def get_deletion_confirmation_keyboard(vehicle_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до авто",
+                text="🔙 Назад",
                 callback_data=f"view_vehicle_{vehicle_id}"
             ),
         ],
@@ -47,7 +47,7 @@ def get_deletion_success_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до управління авто",
+                text="🔙 Назад",
                 callback_data="admin_vehicles"
             ),
         ],
@@ -77,7 +77,7 @@ def get_deletion_cancelled_keyboard(vehicle_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до списку авто",
+                text="🔙 Назад",
                 callback_data="back_to_vehicles_list"
             ),
         ],
@@ -109,7 +109,7 @@ def get_bulk_deletion_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до управління авто",
+                text="🔙 Назад",
                 callback_data="admin_vehicles"
             ),
         ],
@@ -135,7 +135,7 @@ def get_bulk_deletion_confirmation_keyboard(operation_type: str) -> InlineKeyboa
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до управління авто",
+                text="🔙 Назад",
                 callback_data="admin_vehicles"
             ),
         ],

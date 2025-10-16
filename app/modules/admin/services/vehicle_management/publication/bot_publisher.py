@@ -90,20 +90,27 @@ class BotPublisher:
         
         logger.info(f"🔍 _prepare_vehicle_model: vehicle_type_str='{vehicle_type_str}', condition_str='{condition_str}'")
         
-        # ВАЛІДАЦІЯ ОБОВ'ЯЗКОВИХ ПОЛІВ (тільки тип авто та фото)
+        # ВАЛІДАЦІЯ ОБОВ'ЯЗКОВИХ ПОЛІВ (тип авто, головне фото та фото для групи)
         if not vehicle_type_str:
             raise ValueError("Поле 'vehicle_type' є обов'язковим")
         
+        main_photo = vehicle_data.get('main_photo')
         photos = vehicle_data.get('photos', [])
-        if not photos or len(photos) == 0:
-            raise ValueError("Потрібно хоча б одне фото")
+        
+        if not main_photo and (not photos or len(photos) == 0):
+            raise ValueError("Потрібно хоча б одне фото (головне або для групи)")
         
         # Для необов'язкових полів встановлюємо значення за замовчуванням
-        brand = vehicle_data.get('brand')
-        model = vehicle_data.get('model')
+        brand = vehicle_data.get('brand') or 'Не вказано'
+        model = vehicle_data.get('model') or 'Не вказано'
         year = self._safe_int(vehicle_data.get('year'))
+        if year == 0:
+            year = None  # Якщо рік не вказаний, встановлюємо None
+        
         condition = condition_mapping.get(condition_str, VehicleCondition.USED) if condition_str else VehicleCondition.USED
         price = self._safe_float(vehicle_data.get('price'))
+        if price == 0.0:
+            price = None  # Якщо ціна не вказана, встановлюємо None
         
         vehicle_type = vehicle_type_mapping.get(vehicle_type_str, VehicleType.SADDLE_TRACTOR)
         
@@ -132,6 +139,7 @@ class BotPublisher:
             location=vehicle_data.get('location', ''),
             description=vehicle_data.get('description', ''),
             photos=vehicle_data.get('photos', []),
+            main_photo=vehicle_data.get('main_photo'),
             published_in_bot=True,  # Позначаємо як опубліковане в бот
             is_active=True
         )

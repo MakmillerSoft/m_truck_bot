@@ -100,7 +100,8 @@ class VehicleModel(BaseModel):
     # Додаткова інформація
     location: Optional[str] = None  # Місцезнаходження
     description: Optional[str] = None  # Опис
-    photos: List[str] = []  # Список file_id фото
+    photos: List[str] = []  # Список file_id фото для групи
+    main_photo: Optional[str] = None  # Головне фото для бота (file_id)
 
     # Системні поля
     seller_id: int  # ID продавця
@@ -233,3 +234,28 @@ class SubscriptionModel(BaseModel):
     last_notification: Optional[datetime] = None  # Останнє сповіщення
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+
+class GroupTopicModel(BaseModel):
+    """Модель гілки групи (forum topic)"""
+
+    id: Optional[int] = None
+    thread_id: int
+    name: str
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class BroadcastModel(BaseModel):
+    """Модель розсилки"""
+
+    id: Optional[int] = None
+    text: Optional[str] = None
+    button_text: Optional[str] = None
+    button_url: Optional[str] = None
+    media_type: Optional[str] = None  # photo | video | media_group
+    media_file_id: Optional[str] = None
+    media_group_id: Optional[str] = None
+    status: str = "draft"  # draft | sent | scheduled
+    schedule_period: str = "none"  # none | daily | weekly
+    scheduled_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.now)

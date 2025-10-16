@@ -46,12 +46,8 @@ def get_search_parameters_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🏷️ По марці",
-                    callback_data="search_by_brand"
-                ),
-                InlineKeyboardButton(
-                    text="🚗 По моделі",
-                    callback_data="search_by_model"
+                    text="🏷️🚗 По марці або моделі",
+                    callback_data="search_by_brand_model"
                 )
             ],
             [
@@ -86,7 +82,7 @@ def get_search_results_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 До пошуку",
+                    text="🔙 Назад",
                     callback_data="back_to_quick_search"
                 )
             ]
@@ -100,13 +96,13 @@ def get_back_to_parameters_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔙 До параметрів",
+                    text="🔙 Назад",
                     callback_data="search_by_parameters"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 До пошуку",
+                    text="🔙 Назад",
                     callback_data="back_to_quick_search"
                 )
             ]

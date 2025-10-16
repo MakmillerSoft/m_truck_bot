@@ -29,8 +29,9 @@ class VehicleCreationStates(StatesGroup):
     waiting_for_cargo_dimensions = State()  # 17. Габарити вантажного відсіку
     waiting_for_location = State()          # 18. Місцезнаходження
     waiting_for_description = State()       # 19. Опис авто
-    waiting_for_photos = State()            # 20. Фото авто
-    waiting_for_additional_photos = State() # Додаткові фото авто
+    waiting_for_main_photo = State()        # 20. Головне фото (для картки в боті)
+    waiting_for_group_photos = State()      # 21. Фото для групи (медіагрупа)
+    waiting_for_additional_group_photos = State() # Додаткові фото для групи
     
     # Підсумкова картка
     summary_card = State()                  # Підсумкова картка

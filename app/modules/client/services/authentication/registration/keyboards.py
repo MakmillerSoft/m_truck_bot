@@ -21,18 +21,21 @@ def get_phone_keyboard() -> ReplyKeyboardMarkup:
 def get_main_menu_inline_keyboard() -> InlineKeyboardMarkup:
     """Інлайн головне меню клієнта (без адмін опцій)"""
     keyboard = [
-        [InlineKeyboardButton(text="🔍 Пошук авто", callback_data="client_search")],
+        [InlineKeyboardButton(text="🚛 Каталог авто", callback_data="client_catalog_menu")],
         [
             InlineKeyboardButton(text="📋 Мої збережені", callback_data="client_saved"),
-            InlineKeyboardButton(text="💬 Повідомлення", callback_data="client_messages"),
+            InlineKeyboardButton(text="🔔 Підписки", callback_data="client_subscriptions"),
         ],
         [
-            InlineKeyboardButton(text="🏢 Про компанію", callback_data="client_company"),
+            InlineKeyboardButton(text="💬 Повідомлення", callback_data="client_messages"),
             InlineKeyboardButton(text="📞 Контакти", callback_data="client_contacts"),
         ],
         [
-            InlineKeyboardButton(text="👤 Профіль", callback_data="client_profile"),
+            InlineKeyboardButton(text="🏢 Про компанію", callback_data="client_company"),
             InlineKeyboardButton(text="❓ Допомога", callback_data="client_help"),
+        ],
+        [
+            InlineKeyboardButton(text="👤 Профіль", callback_data="client_profile"),
         ],
     ]
 

@@ -97,7 +97,7 @@ def get_vehicles_list_keyboard(
     
     # Кнопка "Назад"
     buttons.append([InlineKeyboardButton(
-        text="🔙 Назад до управління авто",
+        text="🔙 Назад",
         callback_data="admin_vehicles"
     )])
     
@@ -149,7 +149,7 @@ def get_vehicle_detail_keyboard(vehicle_id: int, status: str = "available", grou
     
     buttons.append([
         InlineKeyboardButton(
-            text="🔙 Назад до списку",
+            text="🔙 Назад",
             callback_data="back_to_vehicles_list"
         ),
     ])
@@ -174,7 +174,7 @@ def get_vehicle_edit_keyboard(vehicle_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до перегляду",
+                text="🔙 Назад",
                 callback_data=f"view_vehicle_{vehicle_id}"
             ),
         ],
@@ -222,7 +222,7 @@ def get_vehicle_stats_keyboard(vehicle_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до перегляду",
+                text="🔙 Назад",
                 callback_data=f"view_vehicle_{vehicle_id}"
             ),
         ],
@@ -242,7 +242,7 @@ def get_empty_vehicles_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до управління авто",
+                text="🔙 Назад",
                 callback_data="admin_vehicles"
             ),
         ],

@@ -11,13 +11,5 @@ class ProfileStates(StatesGroup):
     waiting_for_first_name = State()
     waiting_for_last_name = State()
     waiting_for_phone = State()
-    waiting_for_notifications = State()
-
-
-class SettingsStates(StatesGroup):
-    """Стани для налаштувань"""
-
-    waiting_for_notification_preference = State()
-    waiting_for_language_preference = State()
 
 

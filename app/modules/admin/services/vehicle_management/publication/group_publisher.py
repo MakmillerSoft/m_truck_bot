@@ -4,7 +4,7 @@
 import logging
 from typing import Dict, Any, List
 from aiogram import Bot
-from aiogram.types import InputMediaPhoto, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InputMediaPhoto, InputMediaVideo, InlineKeyboardMarkup, InlineKeyboardButton
 
 from app.config.settings import settings
 from .group_templates import (
@@ -106,22 +106,17 @@ class GroupPublisher:
             logger.error(f"❌ Помилка публікації в групу: {e}", exc_info=True)
             return False, f"Помилка публікації: {str(e)}", 0
     
-    def _create_media_group(self, photos: List[str], caption: str) -> List[InputMediaPhoto]:
-        """Створення медіагрупи з фото"""
-        media_group = []
-        
-        for i, photo_id in enumerate(photos):
-            # Додаємо підпис тільки до першого фото
+    def _create_media_group(self, photos: List[str], caption: str) -> List:
+        """Створення медіагрупи з фото/відео із збереженим префіксом video:."""
+        media_group: List = []
+        for i, raw_id in enumerate(photos):
+            is_video = isinstance(raw_id, str) and raw_id.startswith("video:")
+            file_id = raw_id.split(":", 1)[1] if is_video else raw_id
             media_caption = caption if i == 0 else None
-            
-            media_group.append(
-                InputMediaPhoto(
-                    media=photo_id,
-                    caption=media_caption,
-                    parse_mode="HTML"
-                )
-            )
-        
+            if is_video:
+                media_group.append(InputMediaVideo(media=file_id, caption=media_caption, parse_mode="HTML"))
+            else:
+                media_group.append(InputMediaPhoto(media=file_id, caption=media_caption, parse_mode="HTML"))
         return media_group
     
     async def test_group_connection(self) -> tuple[bool, str]:

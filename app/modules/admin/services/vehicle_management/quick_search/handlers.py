@@ -69,8 +69,7 @@ async def show_search_parameters(callback: CallbackQuery):
 
 🆔 <b>По ID авто</b> - точний пошук по ідентифікатору
 🔢 <b>По VIN коду</b> - пошук по VIN коду
-🏷️ <b>По марці</b> - пошук по марці авто
-🚗 <b>По моделі</b> - пошук по моделі авто
+🏷️🚗 <b>По марці або моделі</b> - пошук одночасно
 📅 <b>По роках випуску</b> - пошук в діапазоні років
 💰 <b>По вартості</b> - пошук в діапазоні цін
 
@@ -132,7 +131,7 @@ async def search_by_id_start(callback: CallbackQuery, state: FSMContext):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="🔙 До параметрів",
+                        text="🔙 Назад",
                         callback_data="search_by_parameters"
                     )
                 ]
@@ -191,12 +190,24 @@ async def search_by_id_process(message: Message, state: FSMContext):
             
             # Відправляємо результат
             if photo_file_id:
-                await message.answer_photo(
-                    photo=photo_file_id,
-                    caption=detail_text,
-                    parse_mode="HTML",
-                    reply_markup=keyboard
-                )
+                # Визначаємо тип: фото чи відео (префікс video:)
+                is_video = isinstance(photo_file_id, str) and photo_file_id.startswith("video:")
+                file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
+                
+                if is_video:
+                    await message.answer_video(
+                        video=file_id,
+                        caption=detail_text,
+                        parse_mode="HTML",
+                        reply_markup=keyboard
+                    )
+                else:
+                    await message.answer_photo(
+                        photo=file_id,
+                        caption=detail_text,
+                        parse_mode="HTML",
+                        reply_markup=keyboard
+                    )
             else:
                 await message.answer(
                     detail_text,
@@ -239,7 +250,7 @@ async def search_by_vin_start(callback: CallbackQuery, state: FSMContext):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="🔙 До параметрів",
+                        text="🔙 Назад",
                         callback_data="search_by_parameters"
                     )
                 ]
@@ -265,55 +276,19 @@ async def search_by_vin_start(callback: CallbackQuery, state: FSMContext):
 async def search_by_vin_process(message: Message, state: FSMContext):
     """Обробка пошуку по VIN"""
     try:
-        # Очищуємо стан
-        await state.clear()
-        
         vin_code = message.text.strip().upper()
         
         # Шукаємо авто
         vehicles = await db_manager.search_vehicles_by_vin(vin_code)
         
         if vehicles:
-            # Якщо знайдено одне авто - показуємо повну картку
-            if len(vehicles) == 1:
-                vehicle = vehicles[0]
-                from ..listing.formatters import format_admin_vehicle_card
-                from ..listing.keyboards import get_vehicle_detail_keyboard
-                
-                detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
-                
-                # Створюємо клавіатуру як у блоці "Всі авто"
-                keyboard = get_vehicle_detail_keyboard(
-                    vehicle_id=vehicle.id,
-                    status=vehicle.status if hasattr(vehicle, 'status') else 'available',
-                    group_message_id=vehicle.group_message_id if hasattr(vehicle, 'group_message_id') else None
-                )
-                
-                # Відправляємо результат
-                if photo_file_id:
-                    await message.answer_photo(
-                        photo=photo_file_id,
-                        caption=detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-                else:
-                    await message.answer(
-                        detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-            else:
-                # Якщо знайдено кілька авто - показуємо список з можливістю вибору
-                from .formatters import format_search_results
-                
-                results_text = format_search_results(vehicles, f"VIN код: {vin_code}")
-                
-                await message.answer(
-                    results_text,
-                    parse_mode="HTML",
-                    reply_markup=get_search_results_keyboard()
-                )
+            # Уніфікована навігація по результатах
+            await _process_search_results(
+                vehicles,
+                message,
+                state,
+                f"VIN: {vin_code}"
+            )
             
             logger.info(f"✅ Знайдено {len(vehicles)} авто по VIN {vin_code} для користувача {message.from_user.id}")
         else:
@@ -327,228 +302,6 @@ async def search_by_vin_process(message: Message, state: FSMContext):
         
     except Exception as e:
         logger.error(f"❌ Помилка пошуку по VIN: {e}")
-        await message.answer(
-            "❌ <b>Помилка пошуку</b>\n\nСталася помилка при пошуку авто. Спробуйте ще раз.",
-            parse_mode="HTML"
-        )
-
-
-# Пошук по марці
-@router.callback_query(F.data == "search_by_brand")
-async def search_by_brand_start(callback: CallbackQuery, state: FSMContext):
-    """Початок пошуку по марці"""
-    await callback.answer()
-    
-    try:
-        text = """🏷️ <b>Пошук по марці</b>
-
-Введіть марку авто для пошуку:
-
-<i>Наприклад: Mercedes, Volvo, Scania, MAN</i>"""
-        
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="🔙 До параметрів",
-                        callback_data="search_by_parameters"
-                    )
-                ]
-            ]
-        )
-        
-        await callback.message.edit_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=keyboard
-        )
-        
-        await state.set_state(QuickSearchStates.waiting_for_brand)
-        
-        logger.info(f"🏷️ Початок пошуку по марці для користувача {callback.from_user.id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Помилка початку пошуку по марці: {e}")
-        await callback.answer("❌ Помилка початку пошуку", show_alert=True)
-
-
-@router.message(QuickSearchStates.waiting_for_brand)
-async def search_by_brand_process(message: Message, state: FSMContext):
-    """Обробка пошуку по марці"""
-    try:
-        # Очищуємо стан
-        await state.clear()
-        
-        brand = message.text.strip()
-        
-        # Шукаємо авто
-        vehicles = await db_manager.search_vehicles_by_brand(brand)
-        
-        if vehicles:
-            # Якщо знайдено одне авто - показуємо повну картку
-            if len(vehicles) == 1:
-                vehicle = vehicles[0]
-                from ..listing.formatters import format_admin_vehicle_card
-                from ..listing.keyboards import get_vehicle_detail_keyboard
-                
-                detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
-                
-                # Створюємо клавіатуру як у блоці "Всі авто"
-                keyboard = get_vehicle_detail_keyboard(
-                    vehicle_id=vehicle.id,
-                    status=vehicle.status if hasattr(vehicle, 'status') else 'available',
-                    group_message_id=vehicle.group_message_id if hasattr(vehicle, 'group_message_id') else None
-                )
-                
-                # Відправляємо результат
-                if photo_file_id:
-                    await message.answer_photo(
-                        photo=photo_file_id,
-                        caption=detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-                else:
-                    await message.answer(
-                        detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-            else:
-                # Якщо знайдено кілька авто - показуємо список з можливістю вибору
-                from .formatters import format_search_results
-                
-                results_text = format_search_results(vehicles, f"Марка: {brand}")
-                
-                await message.answer(
-                    results_text,
-                    parse_mode="HTML",
-                    reply_markup=get_search_results_keyboard()
-                )
-            
-            logger.info(f"✅ Знайдено {len(vehicles)} авто марки {brand} для користувача {message.from_user.id}")
-        else:
-            await message.answer(
-                f"❌ <b>Авто не знайдено</b>\n\nАвто марки {brand} не знайдено в системі.",
-                parse_mode="HTML",
-                reply_markup=get_search_results_keyboard()
-            )
-            
-            logger.info(f"❌ Авто марки {brand} не знайдено для користувача {message.from_user.id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Помилка пошуку по марці: {e}")
-        await message.answer(
-            "❌ <b>Помилка пошуку</b>\n\nСталася помилка при пошуку авто. Спробуйте ще раз.",
-            parse_mode="HTML"
-        )
-
-
-# Пошук по моделі
-@router.callback_query(F.data == "search_by_model")
-async def search_by_model_start(callback: CallbackQuery, state: FSMContext):
-    """Початок пошуку по моделі"""
-    await callback.answer()
-    
-    try:
-        text = """🚗 <b>Пошук по моделі</b>
-
-Введіть модель авто для пошуку:
-
-<i>Наприклад: Actros, FH16, R500</i>"""
-        
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="🔙 До параметрів",
-                        callback_data="search_by_parameters"
-                    )
-                ]
-            ]
-        )
-        
-        await callback.message.edit_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=keyboard
-        )
-        
-        await state.set_state(QuickSearchStates.waiting_for_model)
-        
-        logger.info(f"🚗 Початок пошуку по моделі для користувача {callback.from_user.id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Помилка початку пошуку по моделі: {e}")
-        await callback.answer("❌ Помилка початку пошуку", show_alert=True)
-
-
-@router.message(QuickSearchStates.waiting_for_model)
-async def search_by_model_process(message: Message, state: FSMContext):
-    """Обробка пошуку по моделі"""
-    try:
-        # Очищуємо стан
-        await state.clear()
-        
-        model = message.text.strip()
-        
-        # Шукаємо авто
-        vehicles = await db_manager.search_vehicles_by_model(model)
-        
-        if vehicles:
-            # Якщо знайдено одне авто - показуємо повну картку
-            if len(vehicles) == 1:
-                vehicle = vehicles[0]
-                from ..listing.formatters import format_admin_vehicle_card
-                from ..listing.keyboards import get_vehicle_detail_keyboard
-                
-                detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
-                
-                # Створюємо клавіатуру як у блоці "Всі авто"
-                keyboard = get_vehicle_detail_keyboard(
-                    vehicle_id=vehicle.id,
-                    status=vehicle.status if hasattr(vehicle, 'status') else 'available',
-                    group_message_id=vehicle.group_message_id if hasattr(vehicle, 'group_message_id') else None
-                )
-                
-                # Відправляємо результат
-                if photo_file_id:
-                    await message.answer_photo(
-                        photo=photo_file_id,
-                        caption=detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-                else:
-                    await message.answer(
-                        detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-            else:
-                # Якщо знайдено кілька авто - показуємо список з можливістю вибору
-                from .formatters import format_search_results
-                
-                results_text = format_search_results(vehicles, f"Модель: {model}")
-                
-                await message.answer(
-                    results_text,
-                    parse_mode="HTML",
-                    reply_markup=get_search_results_keyboard()
-                )
-            
-            logger.info(f"✅ Знайдено {len(vehicles)} авто моделі {model} для користувача {message.from_user.id}")
-        else:
-            await message.answer(
-                f"❌ <b>Авто не знайдено</b>\n\nАвто моделі {model} не знайдено в системі.",
-                parse_mode="HTML",
-                reply_markup=get_search_results_keyboard()
-            )
-            
-            logger.info(f"❌ Авто моделі {model} не знайдено для користувача {message.from_user.id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Помилка пошуку по моделі: {e}")
         await message.answer(
             "❌ <b>Помилка пошуку</b>\n\nСталася помилка при пошуку авто. Спробуйте ще раз.",
             parse_mode="HTML"
@@ -572,7 +325,7 @@ async def search_by_years_start(callback: CallbackQuery, state: FSMContext):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="🔙 До параметрів",
+                        text="🔙 Назад",
                         callback_data="search_by_parameters"
                     )
                 ]
@@ -644,9 +397,6 @@ async def search_by_years_to_process(message: Message, state: FSMContext):
         data = await state.get_data()
         year_from = data.get('year_from')
         
-        # Очищуємо стан
-        await state.clear()
-        
         # Перевіряємо логіку діапазону
         if year_from > year_to:
             await message.answer(
@@ -660,46 +410,13 @@ async def search_by_years_to_process(message: Message, state: FSMContext):
         vehicles = await db_manager.search_vehicles_by_years(year_from, year_to)
         
         if vehicles:
-            # Якщо знайдено одне авто - показуємо повну картку
-            if len(vehicles) == 1:
-                vehicle = vehicles[0]
-                from ..listing.formatters import format_admin_vehicle_card
-                from ..listing.keyboards import get_vehicle_detail_keyboard
-                
-                detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
-                
-                # Створюємо клавіатуру як у блоці "Всі авто"
-                keyboard = get_vehicle_detail_keyboard(
-                    vehicle_id=vehicle.id,
-                    status=vehicle.status if hasattr(vehicle, 'status') else 'available',
-                    group_message_id=vehicle.group_message_id if hasattr(vehicle, 'group_message_id') else None
-                )
-                
-                # Відправляємо результат
-                if photo_file_id:
-                    await message.answer_photo(
-                        photo=photo_file_id,
-                        caption=detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-                else:
-                    await message.answer(
-                        detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-            else:
-                # Якщо знайдено кілька авто - показуємо список з можливістю вибору
-                from .formatters import format_search_results
-                
-                results_text = format_search_results(vehicles, f"Роки: {year_from}-{year_to}")
-                
-                await message.answer(
-                    results_text,
-                    parse_mode="HTML",
-                    reply_markup=get_search_results_keyboard()
-                )
+            # Уніфікована навігація по результатах
+            await _process_search_results(
+                vehicles,
+                message,
+                state,
+                f"Роки: {year_from}-{year_to}"
+            )
             
             logger.info(f"✅ Знайдено {len(vehicles)} авто в діапазоні {year_from}-{year_to} для користувача {message.from_user.id}")
         else:
@@ -736,7 +453,7 @@ async def search_by_price_start(callback: CallbackQuery, state: FSMContext):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="🔙 До параметрів",
+                        text="🔙 Назад",
                         callback_data="search_by_parameters"
                     )
                 ]
@@ -808,9 +525,6 @@ async def search_by_price_to_process(message: Message, state: FSMContext):
         data = await state.get_data()
         price_from = data.get('price_from')
         
-        # Очищуємо стан
-        await state.clear()
-        
         # Перевіряємо логіку діапазону
         if price_from > price_to:
             await message.answer(
@@ -824,46 +538,13 @@ async def search_by_price_to_process(message: Message, state: FSMContext):
         vehicles = await db_manager.search_vehicles_by_price_range(price_from, price_to)
         
         if vehicles:
-            # Якщо знайдено одне авто - показуємо повну картку
-            if len(vehicles) == 1:
-                vehicle = vehicles[0]
-                from ..listing.formatters import format_admin_vehicle_card
-                from ..listing.keyboards import get_vehicle_detail_keyboard
-                
-                detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
-                
-                # Створюємо клавіатуру як у блоці "Всі авто"
-                keyboard = get_vehicle_detail_keyboard(
-                    vehicle_id=vehicle.id,
-                    status=vehicle.status if hasattr(vehicle, 'status') else 'available',
-                    group_message_id=vehicle.group_message_id if hasattr(vehicle, 'group_message_id') else None
-                )
-                
-                # Відправляємо результат
-                if photo_file_id:
-                    await message.answer_photo(
-                        photo=photo_file_id,
-                        caption=detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-                else:
-                    await message.answer(
-                        detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-            else:
-                # Якщо знайдено кілька авто - показуємо список з можливістю вибору
-                from .formatters import format_search_results
-                
-                results_text = format_search_results(vehicles, f"Вартість: {price_from:,.0f}-{price_to:,.0f} грн")
-                
-                await message.answer(
-                    results_text,
-                    parse_mode="HTML",
-                    reply_markup=get_search_results_keyboard()
-                )
+            # Уніфікована навігація по результатах
+            await _process_search_results(
+                vehicles,
+                message,
+                state,
+                f"Вартість: {price_from:,.0f}-{price_to:,.0f} грн"
+            )
             
             logger.info(f"✅ Знайдено {len(vehicles)} авто в діапазоні {price_from}-{price_to} грн для користувача {message.from_user.id}")
         else:
@@ -881,3 +562,258 @@ async def search_by_price_to_process(message: Message, state: FSMContext):
             "❌ <b>Помилка пошуку</b>\n\nСталася помилка при пошуку авто. Спробуйте ще раз.",
             parse_mode="HTML"
         )
+
+
+# Об'єднаний пошук по марці та моделі
+@router.callback_query(F.data == "search_by_brand_model")
+async def search_by_brand_model_start(callback: CallbackQuery, state: FSMContext):
+    """Крок 1: Запит марки авто"""
+    await callback.answer()
+    try:
+        text = """🏷️ <b>Пошук по марці та моделі</b>
+
+<b>Крок 1 з 2:</b> Введіть марку авто
+
+<i>Наприклад: Mercedes, Volvo, Scania, MAN</i>"""
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="search_by_parameters")]]
+        )
+
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
+        await state.set_state(QuickSearchStates.waiting_for_brand)
+        
+        logger.info(f"🏷️ Крок 1: Запит марки для користувача {callback.from_user.id}")
+    except Exception as e:
+        logger.error(f"❌ Помилка початку пошуку: {e}")
+        await callback.answer("❌ Помилка початку пошуку", show_alert=True)
+
+
+@router.message(QuickSearchStates.waiting_for_brand)
+async def search_by_brand_input(message: Message, state: FSMContext):
+    """Крок 2: Отримали марку, запитуємо модель"""
+    try:
+        brand = message.text.strip()
+        
+        # Зберігаємо марку в стані
+        await state.update_data(brand=brand)
+        
+        text = f"""🚗 <b>Пошук по марці та моделі</b>
+
+<b>Марка:</b> {brand}
+<b>Крок 2 з 2:</b> Тепер введіть модель
+
+<i>Наприклад: Actros, FH16, R500</i>"""
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="search_by_parameters")]]
+        )
+
+        await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
+        await state.set_state(QuickSearchStates.waiting_for_model)
+        
+        logger.info(f"🚗 Крок 2: Марка '{brand}' збережена, запит моделі для користувача {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"❌ Помилка обробки марки: {e}")
+        await message.answer("❌ <b>Помилка</b>\n\nСпробуйте ще раз.", parse_mode="HTML")
+
+
+@router.message(QuickSearchStates.waiting_for_model)
+async def search_by_brand_and_model_execute(message: Message, state: FSMContext):
+    """Крок 3: Отримали модель, виконуємо пошук"""
+    try:
+        model = message.text.strip()
+        
+        # Отримуємо марку зі стану
+        data = await state.get_data()
+        brand = data.get('brand', '')
+        
+        # Шукаємо авто по марці І моделі
+        vehicles = await db_manager.search_vehicles_by_brand_and_model(brand, model)
+
+        if vehicles:
+            # Зберігаємо результати пошуку в стані для навігації
+            vehicle_ids = [v.id for v in vehicles]
+            await state.update_data(
+                search_results=vehicle_ids,
+                search_filter=f"Марка: {brand}, Модель: {model}",
+                current_search_index=0
+            )
+            
+            # Показуємо перше авто
+            vehicle = vehicles[0]
+            await _show_search_result_vehicle(message, vehicle, 0, len(vehicles), state, f"Марка: {brand}, Модель: {model}")
+
+            logger.info(f"✅ Знайдено {len(vehicles)} авто (марка: '{brand}', модель: '{model}')")
+        else:
+            await state.clear()
+            await message.answer(
+                f"❌ <b>Авто не знайдено</b>\n\nАвто з маркою '{brand}' та моделлю '{model}' не знайдено.",
+                parse_mode="HTML",
+                reply_markup=get_search_results_keyboard(),
+            )
+            logger.info(f"❌ Авто не знайдено: марка '{brand}', модель '{model}'")
+    except Exception as e:
+        logger.error(f"❌ Помилка пошуку: {e}")
+        await message.answer("❌ <b>Помилка пошуку</b>", parse_mode="HTML")
+
+
+async def _process_search_results(vehicles: list, message: Message, state: FSMContext, filter_desc: str):
+    """Універсальна обробка результатів пошуку з навігацією"""
+    if len(vehicles) == 0:
+        return False
+    
+    # Зберігаємо результати пошуку в стані для навігації
+    vehicle_ids = [v.id for v in vehicles]
+    await state.update_data(
+        search_results=vehicle_ids,
+        search_filter=filter_desc,
+        current_search_index=0
+    )
+    
+    # Показуємо перше авто
+    vehicle = vehicles[0]
+    await _show_search_result_vehicle(message, vehicle, 0, len(vehicles), state, filter_desc)
+    return True
+
+
+async def _show_search_result_vehicle(message: Message, vehicle, index: int, total: int, state: FSMContext, filter_desc: str):
+    """Показати авто з результатів пошуку з навігацією"""
+    from ..listing.formatters import format_admin_vehicle_card
+    
+    detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
+    
+    # Додаємо інформацію про пошук
+    header = f"🔍 <b>Результати пошуку</b>\n<i>{filter_desc}</i>\n\n📍 Авто {index + 1} з {total}\n\n"
+    detail_text = header + detail_text
+    
+    # Створюємо клавіатуру з навігацією
+    keyboard = _get_search_navigation_keyboard(vehicle.id, index, total, vehicle.status if hasattr(vehicle, 'status') else 'available', vehicle.group_message_id if hasattr(vehicle, 'group_message_id') else None)
+    
+    if photo_file_id:
+        # Визначаємо тип: фото чи відео (префікс video:)
+        is_video = isinstance(photo_file_id, str) and photo_file_id.startswith("video:")
+        file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
+        
+        if is_video:
+            await message.answer_video(video=file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+        else:
+            await message.answer_photo(photo=file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+    else:
+        await message.answer(detail_text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _get_search_navigation_keyboard(vehicle_id: int, index: int, total: int, status: str, group_message_id: int = None) -> InlineKeyboardMarkup:
+    """Клавіатура для навігації по результатах пошуку"""
+    from ..listing.keyboards import get_vehicle_detail_keyboard
+    
+    # Базова клавіатура з деталей авто
+    base_keyboard = get_vehicle_detail_keyboard(vehicle_id, status, group_message_id)
+    
+    # Додаємо кнопки навігації
+    nav_buttons = []
+    if index > 0:
+        nav_buttons.append(InlineKeyboardButton(text="◀️ Попереднє", callback_data=f"search_prev_{index}"))
+    if index < total - 1:
+        nav_buttons.append(InlineKeyboardButton(text="Наступне ▶️", callback_data=f"search_next_{index}"))
+    
+    # Вставляємо навігацію перед кнопкою "Назад"
+    keyboard_rows = list(base_keyboard.inline_keyboard)
+    if nav_buttons:
+        keyboard_rows.insert(-1, nav_buttons)  # Додаємо перед останнім рядком (Назад)
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+
+@router.callback_query(F.data.startswith("search_prev_"))
+async def navigate_search_prev(callback: CallbackQuery, state: FSMContext):
+    """Навігація до попереднього авто в результатах пошуку"""
+    await callback.answer()
+    try:
+        data = await state.get_data()
+        search_results = data.get('search_results', [])
+        search_filter = data.get('search_filter', '')
+        current_index = data.get('current_search_index', 0)
+        
+        if not search_results or current_index <= 0:
+            await callback.answer("❌ Це перше авто", show_alert=True)
+            return
+        
+        # Переходимо до попереднього
+        new_index = current_index - 1
+        await state.update_data(current_search_index=new_index)
+        
+        # Отримуємо авто з БД
+        vehicle_id = search_results[new_index]
+        vehicle = await db_manager.get_vehicle_by_id(vehicle_id)
+        
+        if not vehicle:
+            await callback.answer("❌ Авто не знайдено", show_alert=True)
+            return
+        
+        # Показуємо авто
+        from ..listing.formatters import format_admin_vehicle_card
+        
+        detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
+        header = f"🔍 <b>Результати пошуку</b>\n<i>{search_filter}</i>\n\n📍 Авто {new_index + 1} з {len(search_results)}\n\n"
+        detail_text = header + detail_text
+        
+        keyboard = _get_search_navigation_keyboard(vehicle.id, new_index, len(search_results), vehicle.status if hasattr(vehicle, 'status') else 'available', vehicle.group_message_id if hasattr(vehicle, 'group_message_id') else None)
+        
+        if photo_file_id:
+            await callback.message.delete()
+            await callback.message.answer_photo(photo=photo_file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+        else:
+            await callback.message.edit_text(detail_text, parse_mode="HTML", reply_markup=keyboard)
+        
+        logger.info(f"◀️ Навігація: авто {new_index + 1}/{len(search_results)}")
+    except Exception as e:
+        logger.error(f"❌ Помилка навігації: {e}")
+        await callback.answer("❌ Помилка навігації", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("search_next_"))
+async def navigate_search_next(callback: CallbackQuery, state: FSMContext):
+    """Навігація до наступного авто в результатах пошуку"""
+    await callback.answer()
+    try:
+        data = await state.get_data()
+        search_results = data.get('search_results', [])
+        search_filter = data.get('search_filter', '')
+        current_index = data.get('current_search_index', 0)
+        
+        if not search_results or current_index >= len(search_results) - 1:
+            await callback.answer("❌ Це останнє авто", show_alert=True)
+            return
+        
+        # Переходимо до наступного
+        new_index = current_index + 1
+        await state.update_data(current_search_index=new_index)
+        
+        # Отримуємо авто з БД
+        vehicle_id = search_results[new_index]
+        vehicle = await db_manager.get_vehicle_by_id(vehicle_id)
+        
+        if not vehicle:
+            await callback.answer("❌ Авто не знайдено", show_alert=True)
+            return
+        
+        # Показуємо авто
+        from ..listing.formatters import format_admin_vehicle_card
+        
+        detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
+        header = f"🔍 <b>Результати пошуку</b>\n<i>{search_filter}</i>\n\n📍 Авто {new_index + 1} з {len(search_results)}\n\n"
+        detail_text = header + detail_text
+        
+        keyboard = _get_search_navigation_keyboard(vehicle.id, new_index, len(search_results), vehicle.status if hasattr(vehicle, 'status') else 'available', vehicle.group_message_id if hasattr(vehicle, 'group_message_id') else None)
+        
+        if photo_file_id:
+            await callback.message.delete()
+            await callback.message.answer_photo(photo=photo_file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+        else:
+            await callback.message.edit_text(detail_text, parse_mode="HTML", reply_markup=keyboard)
+        
+        logger.info(f"▶️ Навігація: авто {new_index + 1}/{len(search_results)}")
+    except Exception as e:
+        logger.error(f"❌ Помилка навігації: {e}")
+        await callback.answer("❌ Помилка навігації", show_alert=True)

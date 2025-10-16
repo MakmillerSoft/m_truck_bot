@@ -70,8 +70,11 @@ async def process_media_group_photos(
             )
 
         # Додаємо фото до групи
-        photo = max(message.photo, key=lambda p: p.file_size)
-        media_groups[media_group_id]['photos'].append(photo.file_id)
+        if message.photo:
+            photo = max(message.photo, key=lambda p: p.file_size)
+            media_groups[media_group_id]['photos'].append(photo.file_id)
+        elif message.video:
+            media_groups[media_group_id]['photos'].append(f"video:{message.video.file_id}")
         media_groups[media_group_id]['processed_count'] += 1
 
         logger.info(f"📷 process_media_group_photos: додано фото {media_groups[media_group_id]['processed_count']} до групи {media_group_id}")
@@ -119,11 +122,13 @@ async def process_group_after_delay(media_group_id: str, delay: float):
 
         # Отримуємо поточні фото зі стану
         current_data = await state.get_data()
-        existing_photos = current_data.get('photos', [])
+        existing_photos = current_data.get('group_photos', [])
 
-        # Додаємо всі фото з групи
+        # Додаємо всі фото з групи (для публікації в групу Telegram)
         all_photos = existing_photos + photos
-        await state.update_data(photos=all_photos)
+        await state.update_data(group_photos=all_photos)
+        
+        logger.info(f"📷 process_group_after_delay: існуючі фото: {len(existing_photos)}, нові фото: {len(photos)}, всього: {len(all_photos)}")
 
         # Визначаємо поточний стан для вибору клавіатури
         current_state = await state.get_state()
@@ -135,35 +140,35 @@ async def process_group_after_delay(media_group_id: str, delay: float):
         count = len(all_photos)
         
         # Визначаємо текст залежно від стану
-        if current_state in [VehicleCreationStates.waiting_for_photos, VehicleCreationStates.waiting_for_additional_photos]:
+        if current_state in [VehicleCreationStates.waiting_for_group_photos, VehicleCreationStates.waiting_for_additional_group_photos]:
             # Стан створення авто
             text = f"""
 🚛 <b>Створення картки авто</b>
 
-<b>Крок 20 з 20:</b> Додайте фото авто
+<b>Крок 21 з 21:</b> Медіа для публікації в групу
 
-✅ Завантажено фото: {count}
-📸 Можете додати ще фото або завершити створення картки
+✅ Завантажено медіа: {count}
+📸/🎥 Можете додати ще фото/відео або завершити створення картки
 
-Завантажте ще фото або натисніть "Завершити":
+Завантажте ще медіа або натисніть "Завершити":
 """
         else:
             # Стан редагування - повертаємося до меню редагування
             text = f"""
-📷 <b>Фото оновлено</b>
+📷 <b>Медіа оновлено</b>
 
-✅ Завантажено фото: {count}
-📸 Фото успішно додано до картки авто
+✅ Завантажено медіа: {count}
+📸/🎥 Медіа успішно додано до картки авто
 
 Повертаємося до меню редагування...
 """
 
         # Визначаємо клавіатуру залежно від стану
-        if current_state == VehicleCreationStates.waiting_for_photos:
+        if current_state == VehicleCreationStates.waiting_for_group_photos:
             # Перше завантаження фото - переходимо до стану підсумку
-            await state.set_state(VehicleCreationStates.waiting_for_additional_photos)
+            await state.set_state(VehicleCreationStates.waiting_for_additional_group_photos)
             keyboard = get_photos_summary_keyboard()
-        elif current_state == VehicleCreationStates.waiting_for_additional_photos:
+        elif current_state == VehicleCreationStates.waiting_for_additional_group_photos:
             # Додаткові фото - залишаємося в тому ж стані
             keyboard = get_photos_summary_keyboard()
         else:
@@ -258,18 +263,31 @@ async def process_group_after_delay(media_group_id: str, delay: float):
                 # Fallback - використовуємо стару логіку
                 keyboard = get_photos_input_keyboard()
 
-        # Відправляємо повідомлення з першим фото та текстом як підписом
-        first_photo = all_photos[0] if all_photos else None
+        # Відправляємо повідомлення з ГОЛОВНИМ фото як прев'ю
+        main_photo = (await state.get_data()).get('main_photo')
+        preview_photo = main_photo or (all_photos[0] if all_photos else None)
         
-        if first_photo:
-            # Відправляємо фото з підписом
-            new_message = await bot.send_photo(
-                chat_id=chat_id,
-                photo=first_photo,
-                caption=text,
-                reply_markup=keyboard,
-                parse_mode=get_default_parse_mode()
-            )
+        if preview_photo:
+            # Визначаємо тип: фото чи відео (префікс video:)
+            is_video = isinstance(preview_photo, str) and preview_photo.startswith("video:")
+            file_id = preview_photo.split(":", 1)[1] if is_video else preview_photo
+            
+            if is_video:
+                new_message = await bot.send_video(
+                    chat_id=chat_id,
+                    video=file_id,
+                    caption=text,
+                    reply_markup=keyboard,
+                    parse_mode=get_default_parse_mode()
+                )
+            else:
+                new_message = await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=file_id,
+                    caption=text,
+                    reply_markup=keyboard,
+                    parse_mode=get_default_parse_mode()
+                )
         else:
             # Якщо немає фото, відправляємо тільки текст
             new_message = await bot.send_message(
@@ -280,10 +298,10 @@ async def process_group_after_delay(media_group_id: str, delay: float):
             )
         
         # Зберігаємо ID залежно від стану
-        if current_state == VehicleCreationStates.waiting_for_photos:
-            await state.update_data(last_photos_message_id=new_message.message_id)
-        elif current_state == VehicleCreationStates.waiting_for_additional_photos:
-            await state.update_data(last_additional_photos_message_id=new_message.message_id)
+        if current_state == VehicleCreationStates.waiting_for_group_photos:
+            await state.update_data(last_group_photos_message_id=new_message.message_id)
+        elif current_state == VehicleCreationStates.waiting_for_additional_group_photos:
+            await state.update_data(last_additional_group_photos_message_id=new_message.message_id)
         
         logger.info(f"📷 process_group_after_delay: створено нове повідомлення {new_message.message_id} для групи {media_group_id}")
 

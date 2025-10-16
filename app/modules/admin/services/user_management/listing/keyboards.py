@@ -97,7 +97,7 @@ def get_users_list_keyboard(
     
     # Кнопка "Назад"
     buttons.append([InlineKeyboardButton(
-        text="🔙 Назад до управління користувачами",
+        text="🔙 Назад",
         callback_data="back_to_user_management"
     )])
     
@@ -168,7 +168,7 @@ def get_user_detail_keyboard(
     
     # Кнопка "Назад до списку"
     buttons.append([InlineKeyboardButton(
-        text="🔙 Назад до списку користувачів",
+        text="🔙 Назад",
         callback_data="back_to_users_list"
     )])
     
@@ -252,7 +252,7 @@ def get_users_search_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 Назад до управління користувачами",
+                    text="🔙 Назад",
                     callback_data="back_to_user_management"
                 )
             ]
@@ -278,7 +278,7 @@ def get_user_management_main_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 Назад до адмін панелі",
+                    text="🔙 Назад",
                     callback_data="back_to_admin_panel"
                 )
             ]

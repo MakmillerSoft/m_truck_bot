@@ -89,9 +89,12 @@ def format_vehicle_summary(data: dict) -> str:
             summary_lines.append(f"✅ <b>{field_name}:</b> {translated_value}{unit_text}")
     
     # Додаємо інформацію про фото
-    photos = data.get('photos', [])
-    if photos:
-        summary_lines.append(f"✅ <b>Фото:</b> {len(photos)} шт.")
+    main_photo = data.get('main_photo')
+    group_photos = data.get('group_photos', [])
+    if main_photo:
+        summary_lines.append(f"✅ <b>Головне фото:</b> додано")
+    if group_photos:
+        summary_lines.append(f"✅ <b>Фото для групи:</b> {len(group_photos)} шт.")
     
     summary_lines.extend(["", "<b>Картка готова до публікації!</b>"])
     
@@ -101,9 +104,10 @@ def format_vehicle_summary(data: dict) -> str:
 async def create_summary_card_with_photo(callback: CallbackQuery, state: FSMContext) -> None:
     """Створення підсумкової картки з фото"""
     data = await state.get_data()
-    photos = data.get('photos', [])
+    main_photo = data.get('main_photo')
+    group_photos = data.get('group_photos', [])
     
-    if not photos:
+    if not (main_photo or (group_photos and len(group_photos) > 0)):
         await callback.message.answer(
             "❌ Потрібно завантажити хоча б одне фото авто",
             reply_markup=get_summary_card_keyboard()
@@ -113,20 +117,32 @@ async def create_summary_card_with_photo(callback: CallbackQuery, state: FSMCont
     # Форматуємо текст підсумкової картки
     summary_text = format_vehicle_summary(data)
     
-    # Отримуємо перше фото
-    first_photo = photos[0]
+    # Вибираємо фото для прев'ю в боті: головне, або перше з фото для групи
+    first_photo = main_photo or (group_photos[0] if group_photos else None)
     
     # Клавіатура
     summary_keyboard = get_summary_card_keyboard()
     
-    # Відправляємо повідомлення з фото та текстом
+    logger.info(f"📷 create_summary_card_with_photo: використовуємо фото для картки в боті: {'main_photo' if main_photo else 'group_photos[0]'}")
+    
+    # Відправляємо повідомлення з медіа та текстом (фото або відео)
     try:
-        await callback.message.answer_photo(
-            photo=first_photo,
-            caption=summary_text,
-            reply_markup=summary_keyboard,
-            parse_mode="HTML"
-        )
+        is_video = isinstance(first_photo, str) and first_photo.startswith("video:")
+        file_id = first_photo.split(":", 1)[1] if is_video else first_photo
+        if is_video:
+            await callback.message.answer_video(
+                video=file_id,
+                caption=summary_text,
+                reply_markup=summary_keyboard,
+                parse_mode="HTML"
+            )
+        else:
+            await callback.message.answer_photo(
+                photo=file_id,
+                caption=summary_text,
+                reply_markup=summary_keyboard,
+                parse_mode="HTML"
+            )
     except Exception as e:
         logger.error(f"📷 Помилка відправки фото: {e}")
         # Якщо не вдалося відправити фото, відправляємо тільки текст
@@ -145,9 +161,10 @@ async def create_summary_card_with_photo(callback: CallbackQuery, state: FSMCont
 async def edit_summary_card_message(callback: CallbackQuery, state: FSMContext) -> None:
     """Редагування існуючого повідомлення в підсумкову картку"""
     data = await state.get_data()
-    photos = data.get('photos', [])
+    main_photo = data.get('main_photo')
+    group_photos = data.get('group_photos', [])
     
-    if not photos:
+    if not (main_photo or (group_photos and len(group_photos) > 0)):
         await callback.message.answer(
             "❌ Потрібно завантажити хоча б одне фото авто",
             reply_markup=get_summary_card_keyboard()
@@ -157,37 +174,34 @@ async def edit_summary_card_message(callback: CallbackQuery, state: FSMContext) 
     # Форматуємо текст підсумкової картки
     summary_text = format_vehicle_summary(data)
     
-    # Отримуємо перше фото
-    first_photo = photos[0]
+    # Вибираємо фото для прев'ю в боті
+    first_photo = main_photo or (group_photos[0] if group_photos else None)
     
     # Клавіатура
     summary_keyboard = get_summary_card_keyboard()
     
+    logger.info(f"📷 edit_summary_card_message: використовуємо фото для картки в боті: {'main_photo' if main_photo else 'group_photos[0]'}")
+    
     # Отримуємо ID повідомлення для редагування
-    last_photos_message_id = data.get('last_photos_message_id')
-    last_additional_photos_message_id = data.get('last_additional_photos_message_id')
+    last_photos_message_id = data.get('last_group_photos_message_id')
+    last_additional_photos_message_id = data.get('last_additional_group_photos_message_id')
     message_to_edit_id = last_additional_photos_message_id or last_photos_message_id
     
     try:
         if message_to_edit_id:
             # Намагаємося редагувати медіа (фото + підпис)
             try:
-                from aiogram.types import InputMediaPhoto
-                
-                # Створюємо медіа об'єкт з фото та підписом
-                media = InputMediaPhoto(
-                    media=first_photo,
-                    caption=summary_text,
-                    parse_mode="HTML"
-                )
-                
+                from aiogram.types import InputMediaPhoto, InputMediaVideo
+                is_video = isinstance(first_photo, str) and first_photo.startswith("video:")
+                file_id = first_photo.split(":", 1)[1] if is_video else first_photo
+                media = InputMediaVideo(media=file_id, caption=summary_text, parse_mode="HTML") if is_video else InputMediaPhoto(media=file_id, caption=summary_text, parse_mode="HTML")
                 await callback.message.bot.edit_message_media(
                     chat_id=callback.message.chat.id,
                     message_id=message_to_edit_id,
                     media=media,
                     reply_markup=summary_keyboard
                 )
-                logger.info(f"📷 Підсумкова картка з фото відредагована в повідомленні {message_to_edit_id}")
+                logger.info(f"📷 Підсумкова картка з медіа відредагована в повідомленні {message_to_edit_id}")
             except Exception as edit_error:
                 logger.warning(f"📷 Не вдалося редагувати медіа повідомлення: {edit_error}")
                 # Якщо не вдалося редагувати медіа, спробуємо редагувати тільки текст
@@ -228,9 +242,10 @@ async def finish_vehicle_creation(callback: CallbackQuery, state: FSMContext):
     # Отримуємо всі дані
     data = await state.get_data()
     
-    # Перевіряємо, чи є хоча б одне фото
-    photos = data.get('photos', [])
-    if not photos:
+    # Перевіряємо наявність головного фото або фото для групи
+    main_photo = data.get('main_photo')
+    group_photos = data.get('group_photos', [])
+    if not (main_photo or (group_photos and len(group_photos) > 0)):
         await callback.message.answer(
             "❌ Потрібно завантажити хоча б одне фото авто",
             reply_markup=get_summary_card_keyboard()
@@ -262,17 +277,17 @@ async def show_publication_options(callback: CallbackQuery, state: FSMContext):
         # Отримуємо дані для перевірки
         data = await state.get_data()
         
-        # Перевіряємо обов'язкові поля
-        required_fields = {
-            'vehicle_type': 'Тип авто',
-            'photos': 'Фото'
-        }
-        
+        # Перевіряємо обов'язкові поля: тип авто, головне фото та фото для групи
+        vehicle_type_present = bool(data.get('vehicle_type'))
+        has_main_photo = bool(data.get('main_photo'))
+        has_group_photos = len(data.get('group_photos', [])) > 0
         missing_fields = []
-        for field, display_name in required_fields.items():
-            value = data.get(field)
-            if not value or (isinstance(value, list) and len(value) == 0):
-                missing_fields.append(display_name)
+        if not vehicle_type_present:
+            missing_fields.append('Тип авто')
+        if not has_main_photo:
+            missing_fields.append('Головне фото')
+        if not has_group_photos:
+            missing_fields.append('Фото для групи')
         
         if missing_fields:
             error_text = f"❌ <b>Помилки публікації:</b>\n\n❌ Помилка валідації: Поле '{missing_fields[0]}' є обов'язковим; Потрібно хоча б одне фото"
@@ -281,6 +296,14 @@ async def show_publication_options(callback: CallbackQuery, state: FSMContext):
                 from aiogram.types import InputMediaPhoto
                 media = InputMediaPhoto(
                     media=callback.message.photo[-1].file_id,
+                    caption=error_text,
+                    parse_mode="HTML"
+                )
+                await callback.message.edit_media(media=media)
+            elif callback.message.video:
+                from aiogram.types import InputMediaVideo
+                media = InputMediaVideo(
+                    media=callback.message.video.file_id,
                     caption=error_text,
                     parse_mode="HTML"
                 )
@@ -302,6 +325,17 @@ async def show_publication_options(callback: CallbackQuery, state: FSMContext):
             from aiogram.types import InputMediaPhoto
             media = InputMediaPhoto(
                 media=callback.message.photo[-1].file_id,
+                caption=options_text,
+                parse_mode="HTML"
+            )
+            await callback.message.edit_media(
+                media=media,
+                reply_markup=get_publication_options_keyboard()
+            )
+        elif callback.message.video:
+            from aiogram.types import InputMediaVideo
+            media = InputMediaVideo(
+                media=callback.message.video.file_id,
                 caption=options_text,
                 parse_mode="HTML"
             )
@@ -346,6 +380,17 @@ async def back_to_summary_card(callback: CallbackQuery, state: FSMContext):
                 media=media,
                 reply_markup=get_summary_card_keyboard()
             )
+        elif callback.message.video:
+            from aiogram.types import InputMediaVideo
+            media = InputMediaVideo(
+                media=callback.message.video.file_id,
+                caption=summary_text,
+                parse_mode="HTML"
+            )
+            await callback.message.edit_media(
+                media=media,
+                reply_markup=get_summary_card_keyboard()
+            )
         else:
             await callback.message.edit_text(
                 summary_text,
@@ -376,13 +421,27 @@ async def publish_to_bot_only(callback: CallbackQuery, state: FSMContext):
         db_manager = DatabaseManager()
         bot_publisher = await create_bot_publisher(callback.bot, db_manager)
         
+        # Підготуємо дані для збереження у БД
+        prepared_data = dict(data)
+        main_photo = data.get('main_photo')
+        group_photos = data.get('group_photos', [])
+        prepared_data['main_photo'] = main_photo
+        prepared_data['photos'] = group_photos  # Для БД зберігаємо тільки фото групи
+        
         # Публікуємо в бот
         success, message, vehicle_id = await bot_publisher.publish_vehicle_to_bot(
-            data, callback.from_user.id
+            prepared_data, callback.from_user.id
         )
         
         if success:
             result_text = f"✅ <b>АВТО УСПІШНО ЗБЕРЕЖЕНО В БОТ</b>\n\n{message}"
+            
+            # Перевіряємо підписки та надсилаємо сповіщення
+            try:
+                from app.modules.client.services.vehicle_search.subscriptions.notifications import check_and_notify_subscriptions
+                await check_and_notify_subscriptions(callback.bot, vehicle_id)
+            except Exception as e:
+                logger.error(f"❌ Помилка перевірки підписок: {e}")
             
             # Очищуємо FSM стан
             await state.clear()
@@ -397,6 +456,14 @@ async def publish_to_bot_only(callback: CallbackQuery, state: FSMContext):
             from aiogram.types import InputMediaPhoto
             media = InputMediaPhoto(
                 media=callback.message.photo[-1].file_id,
+                caption=result_text,
+                parse_mode="HTML"
+            )
+            await callback.message.edit_media(media=media)
+        elif callback.message.video:
+            from aiogram.types import InputMediaVideo
+            media = InputMediaVideo(
+                media=callback.message.video.file_id,
                 caption=result_text,
                 parse_mode="HTML"
             )
@@ -422,11 +489,15 @@ async def publish_to_group_only(callback: CallbackQuery, state: FSMContext):
         # Отримуємо дані
         data = await state.get_data()
         
+        # Підставляємо photos з group_photos (для групи вони і використовуються)
+        prepared_data = dict(data)
+        prepared_data['photos'] = data.get('group_photos', [])
+        
         # Створюємо публікатор
         group_publisher = await create_group_publisher(callback.bot)
         
         # Публікуємо в групу
-        success, message, group_message_id = await group_publisher.publish_vehicle_to_group(data)
+        success, message, group_message_id = await group_publisher.publish_vehicle_to_group(prepared_data)
         
         if success:
             # Зберігаємо авто в БД з інформацією про публікацію в групу
@@ -436,7 +507,11 @@ async def publish_to_group_only(callback: CallbackQuery, state: FSMContext):
             from ..publication.bot_publisher import BotPublisher
             db_manager = DatabaseManager()
             bot_publisher = BotPublisher(callback.bot, db_manager)
-            vehicle_model = bot_publisher._prepare_vehicle_model(data, callback.from_user.id)
+            # Для збереження: окремо main_photo та photos для групи
+            save_data = dict(data)
+            save_data['main_photo'] = data.get('main_photo')
+            save_data['photos'] = data.get('group_photos', [])
+            vehicle_model = bot_publisher._prepare_vehicle_model(save_data, callback.from_user.id)
             
             # Встановлюємо дані про публікацію в групу
             vehicle_model.published_in_group = True
@@ -447,6 +522,13 @@ async def publish_to_group_only(callback: CallbackQuery, state: FSMContext):
             
             if vehicle_id:
                 result_text = f"✅ <b>АВТО УСПІШНО ОПУБЛІКОВАНО В ГРУПУ</b>\n\n{message}\n\n📋 ID авто: {vehicle_id}"
+                
+                # Перевіряємо підписки та надсилаємо сповіщення
+                try:
+                    from app.modules.client.services.vehicle_search.subscriptions.notifications import check_and_notify_subscriptions
+                    await check_and_notify_subscriptions(callback.bot, vehicle_id)
+                except Exception as e:
+                    logger.error(f"❌ Помилка перевірки підписок: {e}")
                 
                 # Очищуємо FSM стан
                 await state.clear()
@@ -463,6 +545,14 @@ async def publish_to_group_only(callback: CallbackQuery, state: FSMContext):
             from aiogram.types import InputMediaPhoto
             media = InputMediaPhoto(
                 media=callback.message.photo[-1].file_id,
+                caption=result_text,
+                parse_mode="HTML"
+            )
+            await callback.message.edit_media(media=media)
+        elif callback.message.video:
+            from aiogram.types import InputMediaVideo
+            media = InputMediaVideo(
+                media=callback.message.video.file_id,
                 caption=result_text,
                 parse_mode="HTML"
             )
@@ -490,6 +580,11 @@ async def publish_to_both(callback: CallbackQuery, state: FSMContext):
         # Отримуємо дані
         data = await state.get_data()
         
+        # Для обох: передаємо main_photo окремо та photos для групи
+        data_for_bot = dict(data)
+        data_for_bot['main_photo'] = data.get('main_photo')
+        data_for_bot['photos'] = data.get('group_photos', [])
+        
         # Створюємо публікатори
         db_manager = DatabaseManager()
         bot_publisher = await create_bot_publisher(callback.bot, db_manager)
@@ -497,11 +592,13 @@ async def publish_to_both(callback: CallbackQuery, state: FSMContext):
         
         # Публікуємо в бот
         bot_success, bot_message, vehicle_id = await bot_publisher.publish_vehicle_to_bot(
-            data, callback.from_user.id
+            data_for_bot, callback.from_user.id
         )
         
         # Публікуємо в групу
-        group_success, group_message, group_message_id = await group_publisher.publish_vehicle_to_group(data)
+        data_for_group = dict(data)
+        data_for_group['photos'] = data.get('group_photos', [])
+        group_success, group_message, group_message_id = await group_publisher.publish_vehicle_to_group(data_for_group)
         
         # Формуємо результат
         if bot_success and group_success:
@@ -511,6 +608,13 @@ async def publish_to_both(callback: CallbackQuery, state: FSMContext):
                     'published_in_group': True,
                     'group_message_id': group_message_id
                 })
+            
+            # Перевіряємо підписки та надсилаємо сповіщення
+            try:
+                from app.modules.client.services.vehicle_search.subscriptions.notifications import check_and_notify_subscriptions
+                await check_and_notify_subscriptions(callback.bot, vehicle_id)
+            except Exception as e:
+                logger.error(f"❌ Помилка перевірки підписок: {e}")
             
             result_text = f"✅ <b>АВТО УСПІШНО ОПУБЛІКОВАНО В БОТ ТА ГРУПУ</b>\n\n🤖 Бот: {bot_message}\n👥 Група: {group_message}"
             
@@ -531,6 +635,14 @@ async def publish_to_both(callback: CallbackQuery, state: FSMContext):
             from aiogram.types import InputMediaPhoto
             media = InputMediaPhoto(
                 media=callback.message.photo[-1].file_id,
+                caption=result_text,
+                parse_mode="HTML"
+            )
+            await callback.message.edit_media(media=media)
+        elif callback.message.video:
+            from aiogram.types import InputMediaVideo
+            media = InputMediaVideo(
+                media=callback.message.video.file_id,
                 caption=result_text,
                 parse_mode="HTML"
             )

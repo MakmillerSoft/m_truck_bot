@@ -31,7 +31,7 @@ def get_stats_main_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до управління авто",
+                text="🔙 Назад",
                 callback_data="admin_vehicles"
             ),
         ],
@@ -61,7 +61,7 @@ def get_detailed_stats_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до статистики",
+                text="🔙 Назад",
                 callback_data="back_to_stats_main"
             ),
         ],
@@ -91,7 +91,7 @@ def get_brand_stats_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до статистики",
+                text="🔙 Назад",
                 callback_data="back_to_stats_main"
             ),
         ],
@@ -121,7 +121,7 @@ def get_price_stats_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до статистики",
+                text="🔙 Назад",
                 callback_data="back_to_stats_main"
             ),
         ],
@@ -151,7 +151,7 @@ def get_monthly_stats_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до статистики",
+                text="🔙 Назад",
                 callback_data="back_to_stats_main"
             ),
         ],
@@ -181,7 +181,7 @@ def get_stats_export_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до статистики",
+                text="🔙 Назад",
                 callback_data="back_to_stats_main"
             ),
         ],
@@ -207,7 +207,7 @@ def get_stats_refresh_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до статистики",
+                text="🔙 Назад",
                 callback_data="back_to_stats_main"
             ),
         ],

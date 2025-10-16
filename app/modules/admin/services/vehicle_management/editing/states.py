@@ -30,6 +30,7 @@ class VehicleEditingStates(StatesGroup):
     waiting_for_cargo_dimensions_edit = State()  # Редагування габаритів
     waiting_for_location_edit = State()       # Редагування місцезнаходження
     waiting_for_description_edit = State()    # Редагування опису
-    waiting_for_photos_edit = State()         # Редагування фото
+    waiting_for_photos_edit = State()         # Редагування фото для групи
+    waiting_for_main_photo_edit = State()     # Редагування головного фото
     waiting_for_add_photos = State()          # Додавання ще фото
     waiting_for_replace_photos = State()      # Заміна всіх фото

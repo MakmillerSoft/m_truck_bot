@@ -21,7 +21,7 @@ def get_vehicle_type_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="❄️ Рефрижератори", callback_data="select_vehicle_type_refrigerator")],
             [InlineKeyboardButton(text="🚐 Фургони", callback_data="select_vehicle_type_van")],
             [InlineKeyboardButton(text="🚌 Буси", callback_data="select_vehicle_type_bus")],
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_vehicle_management")]
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_vehicles")]
         ]
     )
 

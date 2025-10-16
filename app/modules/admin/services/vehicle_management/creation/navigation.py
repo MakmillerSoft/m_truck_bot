@@ -839,14 +839,14 @@ async def skip_location(callback: CallbackQuery, state: FSMContext):
 async def skip_description(callback: CallbackQuery, state: FSMContext):
     """Пропуск введення опису авто"""
     await callback.answer("Опис авто пропущено")
-    await state.set_state(VehicleCreationStates.waiting_for_photos)
+    await state.set_state(VehicleCreationStates.waiting_for_main_photo)
     
     text = """
 🚛 <b>Створення картки авто</b>
 
-<b>Крок 20 з 20:</b> Додайте фото авто
+<b>Крок 20 з 21:</b> Додайте головне фото авто (ОДНЕ фото)
 
-Завантажте фото вантажного авто (можна кілька фото):
+Надішліть одне фото, яке буде відображатись у картці бота:
 """
     
     await callback.message.edit_text(

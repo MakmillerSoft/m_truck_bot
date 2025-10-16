@@ -915,6 +915,15 @@ async def confirm_demote_from_admin(callback: CallbackQuery, state: FSMContext):
         success = await db_manager.update_user(user_id, {"role": "buyer"})
         
         if success:
+            # Очищаємо FSM стани демотованого користувача
+            from app.modules.database.models import UserModel
+            demoted_user = await db_manager.get_user_by_id(user_id)
+            if demoted_user:
+                # Очищаємо кеш ролі в middleware
+                from app.middleware.role_change_guard import role_change_guard
+                role_change_guard.clear_user_cache(demoted_user.telegram_id)
+                logger.info(f"🧹 Очищено кеш ролі для демотованого користувача {demoted_user.telegram_id}")
+            
             # Отримуємо оновленого користувача
             updated_user = await db_manager.get_user_by_id(user_id)
             if updated_user:

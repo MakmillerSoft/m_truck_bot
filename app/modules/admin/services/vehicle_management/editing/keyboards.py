@@ -73,25 +73,46 @@ def get_editing_menu_keyboard(vehicle_data: Dict[str, Any], changes: Optional[Di
             callback_data=f"edit_field_{field_key}"
         )])
     
-    # Фото (особливий випадок) - показуємо завжди
+    # Фото для групи (особливий випадок) - показуємо завжди
     photos = vehicle_data.get('photos', [])
     if photos:
         if changes and 'photos' in changes:
             old_count, new_count = changes['photos']
-            button_text = f"📷 Фото: {new_count} шт. (було: {old_count})"
+            button_text = f"📷 Фото для групи: {new_count} шт. (було: {old_count})"
         else:
-            button_text = f"📷 Фото: {len(photos)} шт."
+            button_text = f"📷 Фото для групи: {len(photos)} шт."
     else:
         # Немає фото - показуємо як "Не вказано"
         if changes and 'photos' in changes:
             old_count, new_count = changes['photos']
-            button_text = f"📷 Фото: {new_count} шт. (було: {old_count})"
+            button_text = f"📷 Фото для групи: {new_count} шт. (було: {old_count})"
         else:
-            button_text = "📷 Фото: [Не вказано]"
+            button_text = "📷 Фото для групи: [Не вказано]"
     
     buttons.append([InlineKeyboardButton(
         text=button_text,
         callback_data="edit_field_photos"
+    )])
+    
+    # Головне фото (особливий випадок) - показуємо завжди
+    main_photo = vehicle_data.get('main_photo')
+    if main_photo:
+        if changes and 'main_photo' in changes:
+            old_value, new_value = changes['main_photo']
+            button_text = f"🖼️ Головне фото: додано (було: {'додано' if old_value else 'не вказано'})"
+        else:
+            button_text = "🖼️ Головне фото: додано"
+    else:
+        # Немає головного фото - показуємо як "Не вказано"
+        if changes and 'main_photo' in changes:
+            old_value, new_value = changes['main_photo']
+            button_text = f"🖼️ Головне фото: {'додано' if new_value else 'не вказано'} (було: {'додано' if old_value else 'не вказано'})"
+        else:
+            button_text = "🖼️ Головне фото: [Не вказано]"
+    
+    buttons.append([InlineKeyboardButton(
+        text=button_text,
+        callback_data="edit_field_main_photo"
     )])
     
     # Кнопка завершення
@@ -125,7 +146,8 @@ def get_field_editing_keyboard(field_name: str, current_value: str) -> InlineKey
         "cargo_dimensions": "габаритів",
         "location": "місцезнаходження",
         "description": "опису",
-        "photos": "фото"
+        "photos": "фото для групи",
+        "main_photo": "головне фото"
     }
     
     display_name = field_display_names.get(field_name, field_name)
@@ -137,7 +159,7 @@ def get_field_editing_keyboard(field_name: str, current_value: str) -> InlineKey
                 [InlineKeyboardButton(text="🆕 Нове", callback_data="edit_condition_new")],
                 [InlineKeyboardButton(text="🔄 Вживане", callback_data="edit_condition_used")],
                 [InlineKeyboardButton(text=f"🗑️ Очистити {display_name}", callback_data=f"clear_field_{field_name}")],
-                [InlineKeyboardButton(text="🔙 Назад до редагування", callback_data="back_to_editing_menu")]
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_editing_menu")]
             ]
         )
     elif field_name == "fuel_type":
@@ -149,7 +171,7 @@ def get_field_editing_keyboard(field_name: str, current_value: str) -> InlineKey
                 [InlineKeyboardButton(text="⛽ Газ/Бензин", callback_data="edit_fuel_gas_petrol")],
                 [InlineKeyboardButton(text="⚡ Електро", callback_data="edit_fuel_electric")],
                 [InlineKeyboardButton(text=f"🗑️ Очистити {display_name}", callback_data=f"clear_field_{field_name}")],
-                [InlineKeyboardButton(text="🔙 Назад до редагування", callback_data="back_to_editing_menu")]
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_editing_menu")]
             ]
         )
     elif field_name == "transmission":
@@ -160,7 +182,7 @@ def get_field_editing_keyboard(field_name: str, current_value: str) -> InlineKey
                 [InlineKeyboardButton(text="🤖 Робот", callback_data="edit_transmission_robot")],
                 [InlineKeyboardButton(text="⚙️ Вариатор", callback_data="edit_transmission_cvt")],
                 [InlineKeyboardButton(text=f"🗑️ Очистити {display_name}", callback_data=f"clear_field_{field_name}")],
-                [InlineKeyboardButton(text="🔙 Назад до редагування", callback_data="back_to_editing_menu")]
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_editing_menu")]
             ]
         )
     elif field_name == "location":
@@ -168,16 +190,14 @@ def get_field_editing_keyboard(field_name: str, current_value: str) -> InlineKey
             inline_keyboard=[
                 [InlineKeyboardButton(text="🏙️ Луцьк", callback_data="edit_location_lutsk")],
                 [InlineKeyboardButton(text=f"🗑️ Очистити {display_name}", callback_data=f"clear_field_{field_name}")],
-                [InlineKeyboardButton(text="🔙 Назад до редагування", callback_data="back_to_editing_menu")]
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_editing_menu")]
             ]
         )
-    elif field_name == "photos":
+    elif field_name == "main_photo":
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="➕ Додати ще фото", callback_data="edit_photos_add")],
-                [InlineKeyboardButton(text="🔄 Змінити всі фото", callback_data="edit_photos_replace")],
                 [InlineKeyboardButton(text=f"🗑️ Очистити {display_name}", callback_data=f"clear_field_{field_name}")],
-                [InlineKeyboardButton(text="🔙 Назад до редагування", callback_data="back_to_editing_menu")]
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_editing_menu")]
             ]
         )
     else:
@@ -189,7 +209,7 @@ def get_field_editing_keyboard(field_name: str, current_value: str) -> InlineKey
                     callback_data=f"clear_field_{field_name}"
                 )],
                 [InlineKeyboardButton(
-                    text=f"🔙 Назад до редагування", 
+                    text=f"🔙 Назад", 
                     callback_data="back_to_editing_menu"
                 )]
             ]

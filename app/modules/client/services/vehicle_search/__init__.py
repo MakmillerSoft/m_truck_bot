@@ -12,7 +12,6 @@ from aiogram.types import Message
 from .quick_search import quick_search_router
 from .advanced_search import advanced_search_router
 from .saved_vehicles import saved_vehicles_router
-from .search_history import search_history_router
 from .subscriptions import subscriptions_router
 
 # Створюємо головний роутер для пошуку авто
@@ -22,7 +21,6 @@ router = Router()
 router.include_router(quick_search_router)
 router.include_router(advanced_search_router)
 router.include_router(saved_vehicles_router)
-router.include_router(search_history_router)
 router.include_router(subscriptions_router)
 
 # Головний обробник пошуку
@@ -37,7 +35,6 @@ __all__ = [
     'quick_search_router',
     'advanced_search_router',
     'saved_vehicles_router',
-    'search_history_router',
     'subscriptions_router'
 ]
 

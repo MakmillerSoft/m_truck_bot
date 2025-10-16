@@ -118,40 +118,34 @@ async def debug_command(message: Message, state: FSMContext):
     await message.answer(debug_info.strip(), parse_mode=get_default_parse_mode())
 
 
-@router.message(Command("profile"), StateFilter(None))
-async def profile_command(message: Message):
-    """Показати профіль користувача"""
-    from app.modules.profile.handlers import profile_command as profile_handler
-
-    await profile_handler(message)
-
-
-@router.callback_query(F.data == "back_to_profile")
-async def back_to_profile(callback: CallbackQuery):
-    """Повернутися до профілю"""
-    await callback.answer()
-
-    # Перевіряємо реєстрацію користувача
-    user = await db_manager.get_user_by_telegram_id(callback.from_user.id)
-    if not user:
-        await callback.message.edit_text(
-            "❌ <b>Помилка!</b> Спочатку зареєструйтеся командою /start",
-            parse_mode=get_default_parse_mode(),
-        )
-        return
-
-    # Викликаємо функцію профілю напряму для callback
-    from app.modules.profile.handlers import show_profile_for_callback
-
-    await show_profile_for_callback(callback)
+# ВИМКНЕНО - старий модуль профілю видалено, використовується новий
+# @router.message(Command("profile"), StateFilter(None))
+# async def profile_command(message: Message):
+#     """Показати профіль користувача"""
+#     from app.modules.profile.handlers import profile_command as profile_handler
+#     await profile_handler(message)
 
 
-@router.callback_query(F.data == "show_saved_vehicles_inline")
-async def show_saved_vehicles_inline(callback: CallbackQuery):
-    """Показати збережені авто через inline кнопку"""
-    await callback.answer()
+# ВИМКНЕНО - старий модуль профілю видалено
+# @router.callback_query(F.data == "back_to_profile")
+# async def back_to_profile(callback: CallbackQuery):
+#     """Повернутися до профілю"""
+#     await callback.answer()
+#     user = await db_manager.get_user_by_telegram_id(callback.from_user.id)
+#     if not user:
+#         await callback.message.edit_text(
+#             "❌ <b>Помилка!</b> Спочатку зареєструйтеся командою /start",
+#             parse_mode=get_default_parse_mode(),
+#         )
+#         return
+#     from app.modules.profile.handlers import show_profile_for_callback
+#     await show_profile_for_callback(callback)
 
-    # Використовуємо функцію для callback
-    from app.modules.search.handlers import show_saved_vehicles_for_callback
 
-    await show_saved_vehicles_for_callback(callback)
+# ВИМКНЕНО - старий модуль search видалено
+# @router.callback_query(F.data == "show_saved_vehicles_inline")
+# async def show_saved_vehicles_inline(callback: CallbackQuery):
+#     """Показати збережені авто через inline кнопку"""
+#     await callback.answer()
+#     from app.modules.search.handlers import show_saved_vehicles_for_callback
+#     await show_saved_vehicles_for_callback(callback)

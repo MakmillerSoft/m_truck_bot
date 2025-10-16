@@ -20,6 +20,8 @@ from .models import (
     SearchRequestModel,
     SearchHistoryModel,
     SubscriptionModel,
+    GroupTopicModel,
+    BroadcastModel,
 )
 
 
@@ -172,15 +174,113 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS manager_requests (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
+                    vehicle_id INTEGER,
                     request_type TEXT NOT NULL,
                     details TEXT NOT NULL,
                     status TEXT DEFAULT 'new',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
                 )
             """
             )
+
+            # Міграція: додати vehicle_id якщо відсутній
+            try:
+                async with db.execute("PRAGMA table_info(manager_requests)") as cursor:
+                    cols = await cursor.fetchall()
+                    col_names = {row[1] for row in cols}
+                    if "vehicle_id" not in col_names:
+                        await db.execute("ALTER TABLE manager_requests ADD COLUMN vehicle_id INTEGER")
+                        await db.commit()
+                        logger.info("ℹ️ Колонка vehicle_id додана в таблицю manager_requests")
+            except Exception as e:
+                logger.info(f"ℹ️ Колонка vehicle_id вже існує або помилка: {e}")
+            
+            # Міграція: зробити необов'язкові поля в таблиці vehicles та додати main_photo
+            try:
+                # Перевіряємо чи потрібна міграція
+                async with db.execute("PRAGMA table_info(vehicles)") as cursor:
+                    cols = await cursor.fetchall()
+                    col_names = {col[1] for col in cols}
+                    
+                    # Якщо є NOT NULL на brand, model, year, condition, price - робимо міграцію
+                    needs_migration = False
+                    for col in cols:
+                        col_name = col[1]
+                        not_null = col[3]  # 0 = NULL allowed, 1 = NOT NULL
+                        if col_name in ['brand', 'model', 'year', 'condition', 'price'] and not_null == 1:
+                            needs_migration = True
+                            break
+                    
+                    # Перевіряємо чи є поле main_photo
+                    needs_main_photo = 'main_photo' not in col_names
+                    
+                    if needs_migration or needs_main_photo:
+                        logger.info("🔄 Починаємо міграцію таблиці vehicles для необов'язкових полів та main_photo...")
+                        
+                        # Створюємо нову таблицю з правильною схемою
+                        await db.execute("""
+                            CREATE TABLE IF NOT EXISTS vehicles_new (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                brand TEXT,
+                                model TEXT,
+                                year INTEGER,
+                                vehicle_type TEXT NOT NULL,
+                                condition TEXT,
+                                status TEXT DEFAULT 'available',
+                                price REAL,
+                                currency TEXT DEFAULT 'USD',
+                                mileage INTEGER,
+                                engine_volume REAL,
+                                power_hp INTEGER,
+                                transmission TEXT,
+                                fuel_type TEXT,
+                                body_type TEXT,
+                                wheel_radius TEXT,
+                                load_capacity INTEGER,
+                                total_weight INTEGER,
+                                cargo_dimensions TEXT,
+                                location TEXT,
+                                description TEXT,
+                                photos TEXT DEFAULT '[]',
+                                main_photo TEXT,
+                                seller_id INTEGER NOT NULL,
+                                is_active BOOLEAN DEFAULT 1,
+                                views_count INTEGER DEFAULT 0,
+                                published_at TIMESTAMP,
+                                published_in_group BOOLEAN DEFAULT 0,
+                                published_in_bot BOOLEAN DEFAULT 0,
+                                group_message_id INTEGER,
+                                bot_message_id INTEGER,
+                                vin_code TEXT,
+                                status_changed_at TIMESTAMP,
+                                sold_at TIMESTAMP,
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                FOREIGN KEY (seller_id) REFERENCES users(id)
+                            )
+                        """)
+                        
+                        # Копіюємо дані зі старої таблиці (додаємо main_photo як NULL)
+                        await db.execute("""
+                            INSERT INTO vehicles_new 
+                            SELECT *, NULL as main_photo FROM vehicles
+                        """)
+                        
+                        # Видаляємо стару таблицю
+                        await db.execute("DROP TABLE vehicles")
+                        
+                        # Перейменовуємо нову таблицю
+                        await db.execute("ALTER TABLE vehicles_new RENAME TO vehicles")
+                        
+                        await db.commit()
+                        logger.info("✅ Міграція таблиці vehicles завершена успішно!")
+                    else:
+                        logger.info("ℹ️ Таблиця vehicles вже має правильну схему")
+            except Exception as e:
+                logger.error(f"❌ Помилка міграції таблиці vehicles: {e}")
 
             # Створення таблиці історії пошуків
             await db.execute(
@@ -232,6 +332,51 @@ class DatabaseManager:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """
+            )
+
+            # Створення таблиць для розсилок та топіків групи
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS group_topics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    thread_id INTEGER UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS broadcasts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text TEXT,
+                    button_text TEXT,
+                    button_url TEXT,
+                    media_type TEXT,
+                    media_file_id TEXT,
+                    media_group_id TEXT,
+                    status TEXT DEFAULT 'draft', -- draft | sent | scheduled
+                    schedule_period TEXT DEFAULT 'none', -- none | daily | weekly
+                    scheduled_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS broadcast_deliveries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    broadcast_id INTEGER NOT NULL,
+                    topic_id INTEGER NOT NULL,
+                    status TEXT DEFAULT 'pending', -- pending | success | failed
+                    sent_at TIMESTAMP,
+                    error TEXT,
+                    FOREIGN KEY (broadcast_id) REFERENCES broadcasts(id),
+                    FOREIGN KEY (topic_id) REFERENCES group_topics(id)
                 )
             """
             )
@@ -657,6 +802,7 @@ class DatabaseManager:
                 vehicle.cargo_dimensions,         # 16
                 vehicle.location,                 # 17
                 vehicle.description,              # 18
+                vehicle.main_photo,               # 19 main_photo
                 vehicle.seller_id,                # 19
                 vehicle.created_at.isoformat() if vehicle.created_at else None,   # 20
                 vehicle.updated_at.isoformat() if vehicle.updated_at else None,   # 21
@@ -680,12 +826,12 @@ class DatabaseManager:
                 INSERT INTO vehicles (brand, model, year, vehicle_type, condition, price,
                                     currency, mileage, engine_volume, power_hp, wheel_radius,
                                     body_type, transmission, load_capacity, total_weight,
-                                    cargo_dimensions, location, description,
+                                    cargo_dimensions, location, description, main_photo,
                                     seller_id, created_at, updated_at, fuel_type, is_active,
                                     views_count, published_at,
                                     published_in_group, published_in_bot, group_message_id,
                                     bot_message_id, photos, vin_code)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 values,
             )
@@ -733,6 +879,15 @@ class DatabaseManager:
                     vehicle_data = self._process_vehicle_data(dict(row))
                     vehicles.append(VehicleModel(**vehicle_data))
                 return vehicles
+
+    async def get_vehicles_count(self) -> int:
+        """Отримати загальну кількість активних авто"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT COUNT(*) as count FROM vehicles WHERE is_active = 1"
+            ) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else 0
 
     async def search_vehicles_by_name(self, query: str) -> List[VehicleModel]:
         """Пошук авто за назвою (бренд або модель)"""
@@ -855,6 +1010,79 @@ class DatabaseManager:
             "date_asc": "created_at ASC",
         }
         return sort_mapping.get(sort_by, "created_at DESC")
+
+    # ===== Групові гілки та розсилки =====
+
+    async def upsert_group_topic(self, thread_id: int, name: str) -> int:
+        """Додати або оновити гілку групи"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Спробуємо оновити, якщо існує
+            await db.execute(
+                "UPDATE group_topics SET name = ? WHERE thread_id = ?",
+                (name, thread_id),
+            )
+            await db.execute(
+                "INSERT INTO group_topics (thread_id, name) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM group_topics WHERE thread_id = ?)",
+                (thread_id, name, thread_id),
+            )
+            await db.commit()
+            # Повернемо id
+            async with db.execute("SELECT id FROM group_topics WHERE thread_id = ?", (thread_id,)) as c:
+                row = await c.fetchone()
+                return row[0]
+
+    async def get_group_topics(self) -> List[GroupTopicModel]:
+        """Отримати всі збережені гілки групи"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM group_topics ORDER BY name ASC") as c:
+                rows = await c.fetchall()
+                return [GroupTopicModel(**dict(r)) for r in rows]
+
+    async def delete_group_topic(self, thread_id: int) -> None:
+        """Видалити гілку групи за thread_id"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM group_topics WHERE thread_id = ?", (thread_id,))
+            await db.commit()
+
+    async def update_group_topic_thread_id(self, old_thread_id: int, new_thread_id: int) -> None:
+        """Оновити thread_id гілки"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE group_topics SET thread_id = ? WHERE thread_id = ?",
+                (new_thread_id, old_thread_id),
+            )
+            await db.commit()
+
+    async def create_broadcast(self, data: Dict[str, Any]) -> int:
+        """Зберегти чернетку/історію розсилки"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO broadcasts (text, button_text, button_url, media_type, media_file_id, media_group_id, status, schedule_period, scheduled_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    data.get("text"),
+                    data.get("button_text"),
+                    data.get("button_url"),
+                    data.get("media_type"),
+                    data.get("media_file_id"),
+                    data.get("media_group_id"),
+                    data.get("status", "draft"),
+                    data.get("schedule_period", "none"),
+                    data.get("scheduled_at"),
+                ),
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def list_broadcasts(self, limit: int = 20) -> List[BroadcastModel]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT ?", (limit,)) as c:
+                rows = await c.fetchall()
+                return [BroadcastModel(**dict(r)) for r in rows]
 
     # ===== Збережені авто =====
 
@@ -1011,7 +1239,7 @@ class DatabaseManager:
     # ===== Заявки менеджеру =====
 
     async def create_manager_request(
-        self, user_id: int, request_type: str, details: str
+        self, user_id: int, request_type: str, details: str, vehicle_id: int | None = None
     ) -> int:
         """Створити заявку менеджеру"""
         from .models import ManagerRequestModel
@@ -1024,11 +1252,12 @@ class DatabaseManager:
             await db.execute(
                 """
                 INSERT INTO manager_requests 
-                (user_id, request_type, details, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (user_id, vehicle_id, request_type, details, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     request.user_id,
+                    vehicle_id,
                     request.request_type,
                     request.details,
                     request.status,
@@ -1043,26 +1272,89 @@ class DatabaseManager:
                 result = await cursor.fetchone()
                 return result[0]
 
-    async def get_manager_requests(self, user_id: int = None) -> list:
-        """Отримати заявки менеджеру"""
+    async def get_manager_requests(self, user_id: int = None, status_filter: str = "all", sort: str = "newest", limit: int | None = None, offset: int | None = None) -> list:
+        """Отримати заявки менеджеру з фільтрами та пагінацією"""
         query = """
-            SELECT mr.*, u.first_name, u.last_name, u.phone
+            SELECT mr.*, u.first_name, u.last_name, u.phone,
+                   v.id as vehicle_id_ref, v.brand as vehicle_brand, v.model as vehicle_model, v.price as vehicle_price
             FROM manager_requests mr
             JOIN users u ON mr.user_id = u.id
+            LEFT JOIN vehicles v ON v.id = mr.vehicle_id
         """
         params = []
 
+        where_clauses = []
         if user_id:
-            query += " WHERE mr.user_id = ?"
+            where_clauses.append("mr.user_id = ?")
             params.append(user_id)
+        if status_filter in {"new", "done"}:
+            where_clauses.append("mr.status = ?")
+            params.append(status_filter)
 
-        query += " ORDER BY mr.created_at DESC"
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+
+        # Сортування: за датою або за ім'ям
+        if sort in ("newest", "date_desc"):
+            order_sql = "mr.created_at DESC"
+        elif sort in ("oldest", "date_asc"):
+            order_sql = "mr.created_at ASC"
+        elif sort == "name_asc":
+            order_sql = "LOWER(TRIM(u.first_name || ' ' || IFNULL(u.last_name,''))) ASC"
+        elif sort == "name_desc":
+            order_sql = "LOWER(TRIM(u.first_name || ' ' || IFNULL(u.last_name,''))) DESC"
+        else:
+            order_sql = "mr.created_at DESC"
+
+        query += f" ORDER BY {order_sql}"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        if offset is not None:
+            query += " OFFSET ?"
+            params.append(offset)
 
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
+
+    async def get_manager_requests_count(self, status_filter: str = "all") -> int:
+        """Повернути кількість заявок з урахуванням фільтра"""
+        query = "SELECT COUNT(*) FROM manager_requests"
+        params = []
+        if status_filter in {"new", "done"}:
+            query += " WHERE status = ?"
+            params.append(status_filter)
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(query, params) as cursor:
+                row = await cursor.fetchone()
+                return int(row[0])
+
+    async def get_manager_requests_stats(self) -> dict:
+        """Повернути статистику заявок: total/new/done"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Загальна
+            async with db.execute("SELECT COUNT(*) FROM manager_requests") as c1:
+                total = int((await c1.fetchone())[0])
+            # Нові
+            async with db.execute("SELECT COUNT(*) FROM manager_requests WHERE status = 'new'") as c2:
+                new_cnt = int((await c2.fetchone())[0])
+            # Опрацьовані
+            async with db.execute("SELECT COUNT(*) FROM manager_requests WHERE status = 'done'") as c3:
+                done_cnt = int((await c3.fetchone())[0])
+        return {"total": total, "new": new_cnt, "done": done_cnt}
+
+    async def update_manager_request_status(self, request_id: int, status: str) -> None:
+        """Оновити статус заявки"""
+        now = datetime.now().isoformat()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE manager_requests SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now, request_id),
+            )
+            await db.commit()
 
     # ===== Історія пошуків =====
 
@@ -1228,7 +1520,7 @@ class DatabaseManager:
                 (user_id, subscription_name, vehicle_type, brand, min_year, max_year, 
                  min_price, max_price, max_mileage, location, engine_type, 
                  fuel_type, load_capacity, condition, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     subscription.user_id,
@@ -1247,7 +1539,7 @@ class DatabaseManager:
                     subscription.condition,
                     subscription.is_active,
                     subscription.created_at.isoformat(),
-                    subscription.updated_at.isoformat(),
+                    subscription.created_at.isoformat(),
                 ),
             )
             await db.commit()
@@ -1314,6 +1606,75 @@ class DatabaseManager:
             ) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
+    
+    async def find_vehicles_for_subscription(self, subscription: dict) -> List[VehicleModel]:
+        """Знайти авто що відповідають критеріям підписки"""
+        query = "SELECT * FROM vehicles WHERE status = 'available'"
+        params = []
+        
+        if subscription.get('vehicle_type'):
+            query += " AND vehicle_type = ?"
+            params.append(subscription['vehicle_type'])
+        
+        if subscription.get('brand'):
+            query += " AND brand = ?"
+            params.append(subscription['brand'])
+        
+        if subscription.get('min_year'):
+            query += " AND year >= ?"
+            params.append(subscription['min_year'])
+        
+        if subscription.get('max_year'):
+            query += " AND year <= ?"
+            params.append(subscription['max_year'])
+        
+        if subscription.get('min_price'):
+            query += " AND price >= ?"
+            params.append(subscription['min_price'])
+        
+        if subscription.get('max_price'):
+            query += " AND price <= ?"
+            params.append(subscription['max_price'])
+        
+        if subscription.get('max_mileage'):
+            query += " AND mileage <= ?"
+            params.append(subscription['max_mileage'])
+        
+        if subscription.get('condition'):
+            query += " AND condition = ?"
+            params.append(subscription['condition'])
+        
+        # Додаємо фільтр тільки для нових авто (створених після останнього сповіщення)
+        if subscription.get('last_notification'):
+            query += " AND created_at > ?"
+            params.append(subscription['last_notification'])
+        
+        query += " ORDER BY created_at DESC"
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                vehicles = []
+                for row in rows:
+                    vehicle_data = dict(row)
+                    vehicle_data = self._process_vehicle_data(vehicle_data)
+                    vehicles.append(VehicleModel(**vehicle_data))
+                return vehicles
+    
+    async def update_subscription_last_notification(self, subscription_id: int) -> bool:
+        """Оновити час останнього сповіщення для підписки"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE subscriptions 
+                SET last_notification = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """,
+                (subscription_id,),
+            )
+            await db.commit()
+            return True
 
     # ===== МЕТОДИ ДЛЯ РОБОТИ З ФОТО =====
 
@@ -1383,40 +1744,61 @@ class DatabaseManager:
             logger.error(f"Помилка оновлення авто: {e}")
             return False
 
+    def _parse_media_id(self, raw_id: str) -> tuple[str, str]:
+        """Розпізнати тип медіа зі збереженого рядка.
+
+        Підтримка форматів:
+        - "video:<file_id>" → ("video", <file_id>)
+        - інше → ("photo", raw_id)
+        """
+        try:
+            if isinstance(raw_id, str) and raw_id.startswith("video:"):
+                return "video", raw_id.split(":", 1)[1]
+        except Exception:
+            pass
+        return "photo", raw_id
+
     async def get_vehicle_photos(self, vehicle_id: int) -> List[dict]:
-        """Отримати всі фото авто"""
+        """Отримати всі фото/відео авто (з урахуванням типу)"""
         # Отримуємо авто з БД
         vehicle = await self.get_vehicle_by_id(vehicle_id)
         if not vehicle or not vehicle.photos:
             return []
         
-        # Повертаємо всі фото як список словників
+        # Повертаємо всі медіа як список словників; головне визначається через main_photo
         photos = []
         for i, photo_id in enumerate(vehicle.photos):
+            media_type, file_id = self._parse_media_id(photo_id)
+            main_media_type, main_file_id = self._parse_media_id(vehicle.main_photo) if vehicle.main_photo else (None, None)
             photos.append({
                 "id": i + 1,
                 "vehicle_id": vehicle_id,
-                "file_id": photo_id,
-                "file_path": "",  # Не зберігаємо шлях
-                "is_main": i == 0,  # Перше фото - головне
+                "file_id": file_id,
+                "type": media_type,
+                "file_path": "",
+                "is_main": (file_id == main_file_id),
                 "created_at": vehicle.created_at
             })
         
         return photos
 
     async def get_main_photo(self, vehicle_id: int) -> Optional[dict]:
-        """Отримати головне фото авто"""
+        """Отримати головне медіа авто (фото або відео)"""
         # Спочатку отримуємо авто з БД
         vehicle = await self.get_vehicle_by_id(vehicle_id)
         if not vehicle or not vehicle.photos or len(vehicle.photos) == 0:
             return None
         
-        # Повертаємо перше фото як головне
-        return {
-            "file_id": vehicle.photos[0],
-            "vehicle_id": vehicle_id,
-            "is_main": True
-        }
+        # Якщо задано main_photo — повертаємо його з визначеним типом
+        if vehicle.main_photo:
+            media_type, file_id = self._parse_media_id(vehicle.main_photo)
+            return {
+                "file_id": file_id,
+                "type": media_type,
+                "vehicle_id": vehicle_id,
+                "is_main": True
+            }
+        return None
 
     async def delete_vehicle(self, vehicle_id: int) -> bool:
         """Видалити авто"""
@@ -1505,6 +1887,31 @@ class DatabaseManager:
             async with db.execute(
                 "SELECT * FROM vehicles WHERE model LIKE ?",
                 (f"%{model}%",)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    async def search_vehicles_by_brand_model(self, query: str) -> List[VehicleModel]:
+        """Пошук авто по марці АБО моделі (об'єднаний пошук)"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            like = f"%{query}%"
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE brand LIKE ? OR model LIKE ?",
+                (like, like)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]
+
+    async def search_vehicles_by_brand_and_model(self, brand: str, model: str) -> List[VehicleModel]:
+        """Пошук авто по марці ТА моделі (послідовний пошук)"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            brand_like = f"%{brand}%"
+            model_like = f"%{model}%"
+            async with db.execute(
+                "SELECT * FROM vehicles WHERE brand LIKE ? AND model LIKE ?",
+                (brand_like, model_like)
             ) as cursor:
                 rows = await cursor.fetchall()
                 return [VehicleModel(**self._process_vehicle_data(dict(row))) for row in rows]

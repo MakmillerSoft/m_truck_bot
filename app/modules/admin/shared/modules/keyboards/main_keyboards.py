@@ -33,13 +33,13 @@ def get_admin_main_keyboard() -> InlineKeyboardMarkup:
                 callback_data="admin_settings"
             ),
             InlineKeyboardButton(
-                text="📋 Звіти", 
-                callback_data="admin_reports"
+                text="📨 Заявки", 
+                callback_data="admin_requests"
             ),
         ],
         [
             InlineKeyboardButton(
-                text="🔙 Назад до бота", 
+                text="🔙 Назад", 
                 callback_data="back_to_bot"
             ),
         ],
@@ -151,8 +151,8 @@ def get_admin_broadcast_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="⚙️ Налаштування розсилки", 
-                callback_data="admin_broadcast_settings"
+                text="🧵 Управління топіками", 
+                callback_data="admin_topics"
             ),
             InlineKeyboardButton(
                 text="📊 Статистика розсилок", 
@@ -240,7 +240,7 @@ def get_back_to_main_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton(
-                text="🔙 Назад до головного меню", 
+                text="🔙 Назад", 
                 callback_data="admin_main"
             ),
         ],

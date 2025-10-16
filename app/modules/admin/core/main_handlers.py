@@ -37,6 +37,12 @@ router.callback_query.filter(AdminAccessFilter())
 async def admin_main_callback(callback: CallbackQuery, state: FSMContext):
     """Головне меню адмін панелі"""
     await safe_callback_answer(callback)
+    
+    # Додаткова перевірка доступу (на випадок зміни ролі під час сесії)
+    from ..shared.utils.access_utils import require_admin_access
+    if not await require_admin_access(callback):
+        return
+    
     # Вхід у верхній рівень адмінки — очищаємо попередні стани
     await state.clear()
     
@@ -108,7 +114,7 @@ async def admin_drafts_callback(callback: CallbackQuery, state: FSMContext):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔙 Назад до управління авто",
+                    text="🔙 Назад",
                     callback_data="admin_vehicles"
                 )
             ]

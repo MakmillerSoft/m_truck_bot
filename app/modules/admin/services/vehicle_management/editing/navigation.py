@@ -2,6 +2,7 @@
 Навігація між полями редагування
 """
 import logging
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -195,12 +196,13 @@ async def process_body_type_edit(message: Message, state: FSMContext):
 @router.message(VehicleEditingStates.waiting_for_year_edit)
 async def process_year_edit(message: Message, state: FSMContext):
     """Обробити редагування року випуску"""
+    current_year = datetime.now().year
+    
     try:
         new_value = int(message.text.strip())
-        current_year = 2025
         
-        if new_value < 1900 or new_value > current_year:
-            await message.answer(f"❌ Рік повинен бути між 1900 та {current_year}")
+        if new_value < 1900 or new_value > current_year + 1:
+            await message.answer(f"❌ Рік повинен бути між 1900 та {current_year + 1}")
             return
         
         class FakeCallback:
@@ -470,6 +472,39 @@ async def process_description_edit(message: Message, state: FSMContext):
     
     fake_callback = FakeCallback(message)
     await process_field_edit(fake_callback, state, "description", new_value)
+
+
+@router.message(VehicleEditingStates.waiting_for_main_photo_edit)
+async def process_main_photo_edit(message: Message, state: FSMContext):
+    """Обробити редагування головного фото"""
+    if message.text and (message.text.lower().strip() == "пропустити" or message.text.strip() == "⏭️ Пропустити"):
+        # Користувач хоче залишити поточне головне фото - не змінюємо його
+        data = await state.get_data()
+        current_main_photo = data.get('main_photo')
+        
+        class FakeCallback:
+            def __init__(self, message):
+                self.message = message
+                self.from_user = message.from_user
+        
+        fake_callback = FakeCallback(message)
+        # Залишаємо поточне головне фото без змін
+        await process_field_edit(fake_callback, state, "main_photo", current_main_photo)
+        return
+    
+    if message.photo:
+        # Обробляємо як одиночне фото (головне фото завжди одне)
+        new_main_photo = message.photo[-1].file_id  # Беремо найкращий розмір
+        
+        class FakeCallback:
+            def __init__(self, message):
+                self.message = message
+                self.from_user = message.from_user
+        
+        fake_callback = FakeCallback(message)
+        await process_field_edit(fake_callback, state, "main_photo", new_main_photo)
+    else:
+        await message.answer("❌ Надішліть фото або напишіть 'пропустити'")
 
 
 @router.message(VehicleEditingStates.waiting_for_photos_edit)
@@ -767,6 +802,13 @@ async def process_add_photos_media_group_after_delay(media_group_id: str, state:
     # ДОДАЄМО НОВІ ФОТО ДО ІСНУЮЧИХ
     data = await state.get_data()
     current_photos = data.get('photos', [])
+    
+    # Перевіряємо тип current_photos (може бути рядок '' після очищення)
+    if isinstance(current_photos, str):
+        current_photos = []
+    elif not isinstance(current_photos, list):
+        current_photos = []
+    
     all_photos = current_photos + new_photos
     
     logger.info(f"📷 process_add_photos_media_group_after_delay: поточні фото: {len(current_photos)}, нові фото: {len(new_photos)}, всього: {len(all_photos)}")

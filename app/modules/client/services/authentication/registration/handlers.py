@@ -3,9 +3,16 @@
 """
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardRemove,
+)
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
 import logging
 
 from app.modules.database.manager import db_manager
@@ -72,14 +79,25 @@ async def start_command(message: Message, state: FSMContext):
     else:
         # Новий користувач — просимо номер телефону без інлайн кнопок
         registration_text = (
-            "Для використання усіх можливостей бота, вам необхідно зареєструватися.\n"
-            "Введіть свій номер телефону нижче, або скористайтеся кнопкою Поділитись номером телефону👇"
+            "👋 <b>Вітаємо!</b>\n\n"
+            "Для використання усіх можливостей бота, вам необхідно зареєструватися.\n\n"
+            "📱 <b>Введіть свій номер телефону</b> нижче, або скористайтеся кнопкою 👇"
         )
 
         # Додаємо відладочний текст для власника навіть при реєстрації
         if is_founder:
             registration_text += f"\n\n🔑 <b>DEBUG:</b> Ви є власником бота (ID: {message.from_user.id})"
-
+        
+        logger.info(f"📝 Початок реєстрації для користувача {message.from_user.id}")
+        
+        # Спочатку видаляємо стару Reply keyboard (якщо є)
+        await message.answer(
+            "🔄 <b>Підготовка до реєстрації...</b>",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=get_default_parse_mode(),
+        )
+        
+        # Потім показуємо форму реєстрації
         await message.answer(
             registration_text,
             reply_markup=get_phone_keyboard(),
@@ -108,8 +126,108 @@ async def go_to_profile(callback: CallbackQuery):
 @router.callback_query(F.data == "client_help")
 async def go_to_help(callback: CallbackQuery):
     await callback.answer()
+    
+    help_text = """
+❓ <b>Довідка</b>
+
+<b>Що можна робити в боті:</b>
+
+━━━━━━━━━━━━━━━━━━
+
+🚛 <b>Каталог авто</b>
+Дивіться всі наші вантажівки. Гортайте стрілками ⬅️ ➡️
+Сподобалось авто? Натисніть <b>"❤️ Зберегти"</b>
+
+━━━━━━━━━━━━━━━━━━
+
+📋 <b>Мої збережені</b>
+Тут зберігаються авто, які ви зберегли.
+Швидко знайдете те, що сподобалось раніше.
+
+━━━━━━━━━━━━━━━━━━
+
+💬 <b>Повідомлення</b>
+Хочете щось запитати або шукаєте конкретне авто?
+Натисніть <b>"📝 Залишити заявку"</b> та опишіть що вам потрібно.
+
+<i>Наприклад: "Потрібен тягач Volvo, 2018 року, до $30000"</i>
+
+Менеджер зателефонує вам протягом години (в робочий час).
+
+━━━━━━━━━━━━━━━━━━
+
+👤 <b>Профіль</b>
+Можете змінити своє ім'я, прізвище або телефон.
+Вказуйте правильний телефон - ми зв'яжемось з вами!
+
+━━━━━━━━━━━━━━━━━━
+
+🏢 <b>Про компанію</b>
+Інформація про нас, наші соцмережі та контакти.
+
+━━━━━━━━━━━━━━━━━━
+
+📞 <b>Контакти</b>
+Телефон: +380 66 372 69 41
+Telegram: @mtruck_sales
+
+<b>Працюємо:</b> Пн-Пт, 9:00-18:00
+
+━━━━━━━━━━━━━━━━━━
+
+💡 <b>Підказка:</b>
+Побачили авто в каталозі? Натисніть <b>"📝 Залишити заявку"</b> під карткою - менеджер розповість деталі та допоможе з оформленням.
+"""
+    
     await callback.message.edit_text(
-        "🆘 <b>Допомога</b>\n\nВикористовуйте меню для навігації. Для повернення скористайтеся кнопками назад.",
+        help_text.strip(),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="client_back_to_main")]
+            ]
+        ),
+        parse_mode=get_default_parse_mode(),
+    )
+
+
+@router.callback_query(F.data == "client_back_to_main")
+async def client_back_to_main(callback: CallbackQuery):
+    """Повернення до головного інлайн-меню клієнта"""
+    await callback.answer()
+    
+    # Намагаємось edit, якщо не вийде - видаляємо та створюємо нове
+    try:
+        await callback.message.edit_text(
+            "🏠 <b>Головне меню</b>\n\nОберіть розділ:",
+            reply_markup=get_main_menu_inline_keyboard(),
+            parse_mode=get_default_parse_mode(),
+        )
+    except TelegramBadRequest:
+        # Повідомлення має фото - видаляємо та створюємо нове
+        try:
+            await callback.message.delete()
+        except:
+            pass
+        
+        await callback.message.answer(
+            "🏠 <b>Головне меню</b>\n\nОберіть розділ:",
+            reply_markup=get_main_menu_inline_keyboard(),
+            parse_mode=get_default_parse_mode(),
+        )
+
+
+@router.callback_query(RegistrationStates.waiting_for_phone)
+async def block_callbacks_during_registration(callback: CallbackQuery):
+    """Блокування callback кнопок під час реєстрації"""
+    logger.warning(f"⚠️ Користувач {callback.from_user.id} намагається використати кнопки під час реєстрації")
+    await callback.answer(
+        "⚠️ Спочатку завершіть реєстрацію!",
+        show_alert=True
+    )
+    await callback.message.answer(
+        "📱 <b>Будь ласка, надішліть номер телефону</b>\n\n"
+        "Використайте кнопку нижче або введіть номер вручну:",
+        reply_markup=get_phone_keyboard(),
         parse_mode=get_default_parse_mode(),
     )
 
@@ -118,11 +236,14 @@ async def go_to_help(callback: CallbackQuery):
 async def process_phone_contact(message: Message, state: FSMContext):
     """Обробка отримання номера телефону через контакт"""
     phone = message.contact.phone_number
+    logger.info(f"📞 Користувач {message.from_user.id} поділився контактом: {phone}")
+    
     # Нормалізуємо номер з контакту так само, як і ручний ввід
     normalized_phone = normalize_phone_number(phone)
     if not normalized_phone:
         await message.answer(
             "❌ <b>Невірний формат номера з контакту</b>\nСпробуйте ввести номер вручну.",
+            reply_markup=get_phone_keyboard(),
             parse_mode=get_default_parse_mode(),
         )
         return
@@ -136,12 +257,20 @@ async def process_phone_contact(message: Message, state: FSMContext):
 async def process_phone_text(message: Message, state: FSMContext):
     """Обробка номера телефону як текст із розширеною валідацією"""
     phone = message.text.strip()
+    
+    logger.info(f"📞 Користувач {message.from_user.id} надіслав текст: {phone[:20]}...")
 
     normalized_phone = normalize_phone_number(phone)
     if not normalized_phone:
         await message.answer(
             "❌ <b>Невірний формат номера</b>\n\n"
-            "Приклади коректних форматів: +380XXXXXXXXX, +38XXXXXXXXX, 380XXXXXXXXX, 38XXXXXXXXX, 0XXXXXXXXX",
+            "Приклади коректних форматів:\n"
+            "• +380XXXXXXXXX\n"
+            "• +38XXXXXXXXX\n"
+            "• 380XXXXXXXXX\n"
+            "• 38XXXXXXXXX\n"
+            "• 0XXXXXXXXX",
+            reply_markup=get_phone_keyboard(),
             parse_mode=get_default_parse_mode(),
         )
         return
@@ -239,6 +368,7 @@ async def complete_registration(message: Message, state: FSMContext):
 
     try:
         user_id = await db_manager.create_user(user)
+        logger.info(f"✅ Користувач {message.from_user.id} успішно зареєстрований! DB ID: {user_id}")
 
         success_message = REGISTRATION_SUCCESS.format(phone=data["phone"])
         
@@ -257,9 +387,10 @@ async def complete_registration(message: Message, state: FSMContext):
         )
 
         await state.clear()
+        logger.info(f"🏁 Реєстрація завершена для {message.from_user.id}")
 
     except Exception as e:
-        logger.error(f"❌ Помилка реєстрації користувача {message.from_user.id}: {e}")
+        logger.error(f"❌ Помилка реєстрації користувача {message.from_user.id}: {e}", exc_info=True)
         await message.answer(
             "❌ <b>Помилка при реєстрації.</b> Спробуйте ще раз пізніше.",
             parse_mode=get_default_parse_mode(),

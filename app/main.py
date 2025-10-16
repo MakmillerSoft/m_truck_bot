@@ -33,10 +33,13 @@ async def create_dispatcher() -> Dispatcher:
     # Підключення middleware
     from .middleware.state_guard import StateGuardMiddleware
     from .middleware.active_user_guard import ActiveUserGuardMiddleware
+    from .middleware.role_change_guard import RoleChangeGuardMiddleware
 
     dp.message.middleware(StateGuardMiddleware())
     dp.message.middleware(ActiveUserGuardMiddleware())
+    dp.message.middleware(RoleChangeGuardMiddleware())
     dp.callback_query.middleware(ActiveUserGuardMiddleware())
+    dp.callback_query.middleware(RoleChangeGuardMiddleware())
 
     # Підключення роутерів
     from .handlers.global_handlers import router as global_router
@@ -51,11 +54,11 @@ async def create_dispatcher() -> Dispatcher:
     # from .modules.info.handlers import router as info_router
     # from .modules.messages.handlers import router as messages_router
 
-    # Порядок роутерів - адмін панель має вищий пріоритет
+    # Порядок роутерів - адмінський роутер має вищий пріоритет
     dp.include_router(global_router)
-    # Новий клієнтський модуль ПЕРЕД адмін панеллю, щоб клієнтські хендлери мали нижчий пріоритет за адмінські
+    # Спочатку адмін панель, потім клієнтські модулі
+    dp.include_router(admin_router)
     dp.include_router(client_router)
-    dp.include_router(admin_router)  # Адмін панель ПЕРЕД пошуком
     # dp.include_router(auth_router)
     # dp.include_router(profile_router)
     # dp.include_router(search_router)
@@ -87,13 +90,12 @@ async def main():
         bot = await create_bot()
         dp = await create_dispatcher()
 
-        # Ініціалізація GroupPublisher
-        from .modules.group.publisher import init_group_publisher
-
-        group_publisher = init_group_publisher(bot)
-        logger.info(
-            f"GroupPublisher ініціалізовано (увімкнено: {group_publisher.is_enabled()})"
-        )
+        # Ініціалізація GroupPublisher (ВИМКНЕНО - модуль видалено)
+        # from .modules.group.publisher import init_group_publisher
+        # group_publisher = init_group_publisher(bot)
+        # logger.info(
+        #     f"GroupPublisher ініціалізовано (увімкнено: {group_publisher.is_enabled()})"
+        # )
 
         # Перевірка підключення з таймаутом
         try:

@@ -43,7 +43,7 @@ def get_search_users_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 Назад до управління користувачами",
+                    text="🔙 Назад",
                     callback_data="back_to_user_management"
                 )
             ]
@@ -63,7 +63,7 @@ def get_search_results_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 Назад до пошуку",
+                    text="🔙 Назад",
                     callback_data="admin_search_users"
                 )
             ]
@@ -87,7 +87,7 @@ def get_role_selection_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 Назад до пошуку",
+                    text="🔙 Назад",
                     callback_data="admin_search_users"
                 )
             ]

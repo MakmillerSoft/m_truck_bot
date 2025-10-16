@@ -171,14 +171,26 @@ async def view_vehicle_detail(callback: CallbackQuery, state: FSMContext):
         # Форматуємо картку авто з умовним відображенням полів
         detail_text, photo_file_id = format_admin_vehicle_card(vehicle)
         
-        # Відправляємо детальну інформацію з фото або без
+        # Відправляємо детальну інформацію з медіа або без
         if photo_file_id:
-            await callback.message.answer_photo(
-                photo=photo_file_id,
-                caption=detail_text,
-                reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
-                parse_mode="HTML"
-            )
+            # Визначаємо тип: фото чи відео (префікс video:)
+            is_video = isinstance(photo_file_id, str) and photo_file_id.startswith("video:")
+            file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
+            
+            if is_video:
+                await callback.message.answer_video(
+                    video=file_id,
+                    caption=detail_text,
+                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                    parse_mode="HTML"
+                )
+            else:
+                await callback.message.answer_photo(
+                    photo=file_id,
+                    caption=detail_text,
+                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                    parse_mode="HTML"
+                )
         else:
             await callback.message.edit_text(
                 detail_text,
@@ -639,16 +651,27 @@ async def toggle_vehicle_status(callback: CallbackQuery, state: FSMContext):
             
             # Оновлюємо повідомлення в залежності від типу
             if photo_file_id:
-                # Якщо є фото, редагуємо медіа повідомлення
+                # Якщо є медіа, редагуємо медіа повідомлення
                 try:
-                    from aiogram.types import InputMediaPhoto
+                    from aiogram.types import InputMediaPhoto, InputMediaVideo
                     
-                    # Створюємо медіа об'єкт з фото та підписом
-                    media = InputMediaPhoto(
-                        media=photo_file_id,
-                        caption=detail_text,
-                        parse_mode="HTML"
-                    )
+                    # Визначаємо тип: фото чи відео (префікс video:)
+                    is_video = isinstance(photo_file_id, str) and photo_file_id.startswith("video:")
+                    file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
+                    
+                    # Створюємо медіа об'єкт з фото/відео та підписом
+                    if is_video:
+                        media = InputMediaVideo(
+                            media=file_id,
+                            caption=detail_text,
+                            parse_mode="HTML"
+                        )
+                    else:
+                        media = InputMediaPhoto(
+                            media=file_id,
+                            caption=detail_text,
+                            parse_mode="HTML"
+                        )
                     
                     await callback.message.bot.edit_message_media(
                         chat_id=callback.message.chat.id,
@@ -656,16 +679,24 @@ async def toggle_vehicle_status(callback: CallbackQuery, state: FSMContext):
                         media=media,
                         reply_markup=get_vehicle_detail_keyboard(vehicle_id, new_status, updated_vehicle.group_message_id)
                     )
-                    logger.info(f"📷 Картка авто з фото відредагована в повідомленні {callback.message.message_id}")
+                    logger.info(f"📷 Картка авто з медіа відредагована в повідомленні {callback.message.message_id}")
                 except Exception as edit_error:
                     logger.error(f"❌ Помилка редагування медіа повідомлення: {edit_error}")
-                    # Fallback - відправляємо нове повідомлення з фото
-                    await callback.message.answer_photo(
-                        photo=photo_file_id,
-                        caption=detail_text,
-                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, new_status, updated_vehicle.group_message_id),
-                        parse_mode="HTML"
-                    )
+                    # Fallback - відправляємо нове повідомлення з медіа
+                    if is_video:
+                        await callback.message.answer_video(
+                            video=file_id,
+                            caption=detail_text,
+                            reply_markup=get_vehicle_detail_keyboard(vehicle_id, new_status, updated_vehicle.group_message_id),
+                            parse_mode="HTML"
+                        )
+                    else:
+                        await callback.message.answer_photo(
+                            photo=file_id,
+                            caption=detail_text,
+                            reply_markup=get_vehicle_detail_keyboard(vehicle_id, new_status, updated_vehicle.group_message_id),
+                            parse_mode="HTML"
+                        )
             else:
                 # Якщо немає фото, редагуємо текст
                 try:
@@ -904,15 +935,27 @@ async def update_vehicle_card_after_status_change(callback: CallbackQuery, vehic
         
         # Оновлюємо повідомлення в залежності від типу
         if photo_file_id:
-            # Якщо є фото, редагуємо медіа повідомлення
+            # Якщо є медіа, редагуємо медіа повідомлення
             try:
-                from aiogram.types import InputMediaPhoto
+                from aiogram.types import InputMediaPhoto, InputMediaVideo
                 
-                media = InputMediaPhoto(
-                    media=photo_file_id,
-                    caption=detail_text,
-                    parse_mode="HTML"
-                )
+                # Визначаємо тип: фото чи відео (префікс video:)
+                is_video = isinstance(photo_file_id, str) and photo_file_id.startswith("video:")
+                file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
+                
+                # Створюємо медіа об'єкт з фото/відео та підписом
+                if is_video:
+                    media = InputMediaVideo(
+                        media=file_id,
+                        caption=detail_text,
+                        parse_mode="HTML"
+                    )
+                else:
+                    media = InputMediaPhoto(
+                        media=file_id,
+                        caption=detail_text,
+                        parse_mode="HTML"
+                    )
                 
                 await callback.message.bot.edit_message_media(
                     chat_id=callback.message.chat.id,
@@ -920,16 +963,24 @@ async def update_vehicle_card_after_status_change(callback: CallbackQuery, vehic
                     media=media,
                     reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id)
                 )
-                logger.info(f"📷 Картка авто з фото оновлена в повідомленні {callback.message.message_id}")
+                logger.info(f"📷 Картка авто з медіа оновлена в повідомленні {callback.message.message_id}")
             except Exception as edit_error:
                 logger.error(f"❌ Помилка редагування медіа повідомлення: {edit_error}")
-                # Fallback - відправляємо нове повідомлення з фото
-                await callback.message.answer_photo(
-                    photo=photo_file_id,
-                    caption=detail_text,
-                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
-                    parse_mode="HTML"
-                )
+                # Fallback - відправляємо нове повідомлення з медіа
+                if is_video:
+                    await callback.message.answer_video(
+                        video=file_id,
+                        caption=detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
+                else:
+                    await callback.message.answer_photo(
+                        photo=file_id,
+                        caption=detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
         else:
             # Якщо немає фото, редагуємо текст
             try:
@@ -970,13 +1021,25 @@ async def send_vehicle_card_message(callback: CallbackQuery, vehicle_id: int):
         
         # Відправляємо картку авто
         if photo_file_id:
-            # Якщо є фото, відправляємо фото з підписом
-            await callback.message.answer_photo(
-                photo=photo_file_id,
-                caption=detail_text,
-                reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
-                parse_mode="HTML"
-            )
+            # Якщо є медіа, відправляємо медіа з підписом
+            # Визначаємо тип: фото чи відео (префікс video:)
+            is_video = isinstance(photo_file_id, str) and photo_file_id.startswith("video:")
+            file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
+            
+            if is_video:
+                await callback.message.answer_video(
+                    video=file_id,
+                    caption=detail_text,
+                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                    parse_mode="HTML"
+                )
+            else:
+                await callback.message.answer_photo(
+                    photo=file_id,
+                    caption=detail_text,
+                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                    parse_mode="HTML"
+                )
         else:
             # Якщо немає фото, відправляємо тільки текст
             await callback.message.answer(
