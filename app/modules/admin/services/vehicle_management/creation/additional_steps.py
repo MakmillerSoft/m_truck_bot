@@ -636,26 +636,53 @@ async def process_group_photos_input(message: Message, state: FSMContext):
                 file_id = main_photo.split(":", 1)[1] if is_video else main_photo
                 
                 if is_video:
-                    new_message = await message.answer_video(
-                        video=file_id,
-                        caption=text,
-                        reply_markup=keyboard,
-                        parse_mode=get_default_parse_mode()
-                    )
+                    try:
+                        new_message = await message.answer_video(
+                            video=file_id,
+                            caption=text,
+                            reply_markup=keyboard,
+                            parse_mode=get_default_parse_mode()
+                        )
+                    except Exception as video_error:
+                        logger.warning(f"⚠️ Не вдалося відправити відео: {video_error}")
+                        # Якщо відео недійсне, відправляємо тільки текст
+                        new_message = await message.answer(
+                            text,
+                            reply_markup=keyboard,
+                            parse_mode=get_default_parse_mode()
+                        )
                 else:
+                    try:
+                        new_message = await message.answer_photo(
+                            photo=file_id,
+                            caption=text,
+                            reply_markup=keyboard,
+                            parse_mode=get_default_parse_mode()
+                        )
+                    except Exception as photo_error:
+                        logger.warning(f"⚠️ Не вдалося відправити фото: {photo_error}")
+                        # Якщо фото недійсне, відправляємо тільки текст
+                        new_message = await message.answer(
+                            text,
+                            reply_markup=keyboard,
+                            parse_mode=get_default_parse_mode()
+                        )
+            else:
+                try:
                     new_message = await message.answer_photo(
                         photo=file_id,
                         caption=text,
                         reply_markup=keyboard,
                         parse_mode=get_default_parse_mode()
                     )
-            else:
-                new_message = await message.answer_photo(
-                    photo=file_id,
-                    caption=text,
-                    reply_markup=keyboard,
-                    parse_mode=get_default_parse_mode()
-                )
+                except Exception as photo_error:
+                    logger.warning(f"⚠️ Не вдалося відправити фото: {photo_error}")
+                    # Якщо фото недійсне, відправляємо тільки текст
+                    new_message = await message.answer(
+                        text,
+                        reply_markup=keyboard,
+                        parse_mode=get_default_parse_mode()
+                    )
         except Exception:
             new_message = await message.answer(
                 text,
@@ -732,26 +759,53 @@ async def process_additional_group_photos_input(message: Message, state: FSMCont
                 file_id = main_photo.split(":", 1)[1] if is_video else main_photo
                 
                 if is_video:
-                    new_message = await message.answer_video(
-                        video=file_id,
-                        caption=text,
-                        reply_markup=keyboard,
-                        parse_mode=get_default_parse_mode()
-                    )
+                    try:
+                        new_message = await message.answer_video(
+                            video=file_id,
+                            caption=text,
+                            reply_markup=keyboard,
+                            parse_mode=get_default_parse_mode()
+                        )
+                    except Exception as video_error:
+                        logger.warning(f"⚠️ Не вдалося відправити відео: {video_error}")
+                        # Якщо відео недійсне, відправляємо тільки текст
+                        new_message = await message.answer(
+                            text,
+                            reply_markup=keyboard,
+                            parse_mode=get_default_parse_mode()
+                        )
                 else:
+                    try:
+                        new_message = await message.answer_photo(
+                            photo=file_id,
+                            caption=text,
+                            reply_markup=keyboard,
+                            parse_mode=get_default_parse_mode()
+                        )
+                    except Exception as photo_error:
+                        logger.warning(f"⚠️ Не вдалося відправити фото: {photo_error}")
+                        # Якщо фото недійсне, відправляємо тільки текст
+                        new_message = await message.answer(
+                            text,
+                            reply_markup=keyboard,
+                            parse_mode=get_default_parse_mode()
+                        )
+            else:
+                try:
                     new_message = await message.answer_photo(
                         photo=file_id,
                         caption=text,
                         reply_markup=keyboard,
                         parse_mode=get_default_parse_mode()
                     )
-            else:
-                new_message = await message.answer_photo(
-                    photo=file_id,
-                    caption=text,
-                    reply_markup=keyboard,
-                    parse_mode=get_default_parse_mode()
-                )
+                except Exception as photo_error:
+                    logger.warning(f"⚠️ Не вдалося відправити фото: {photo_error}")
+                    # Якщо фото недійсне, відправляємо тільки текст
+                    new_message = await message.answer(
+                        text,
+                        reply_markup=keyboard,
+                        parse_mode=get_default_parse_mode()
+                    )
         except Exception:
             new_message = await message.answer(
                 text,
@@ -825,3 +879,4 @@ async def back_to_photos_summary(callback: CallbackQuery, state: FSMContext):
 
 
 # Обробник finish_vehicle_creation перенесено в summary_card.py
+

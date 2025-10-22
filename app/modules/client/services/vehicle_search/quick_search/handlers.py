@@ -18,7 +18,7 @@ async def show_catalog_menu(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
     try:
-        total = await db_manager.get_vehicles_count()
+        total = await db_manager.get_available_vehicles_count()
     except Exception:
         total = 0
     text = (
@@ -329,7 +329,7 @@ async def quick_search(callback: CallbackQuery, state: FSMContext):
     """Всі авто - показати першу картку"""
     await callback.answer()
     
-    vehicles = await db_manager.get_vehicles(limit=50)
+    vehicles = await db_manager.get_available_vehicles(limit=50)
 
     if not vehicles:
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -477,12 +477,17 @@ async def view_vehicle_from_subscription(callback: CallbackQuery, state: FSMCont
             await callback.answer("❌ Авто не знайдено", show_alert=True)
             return
         
+        # Перевіряємо, чи авто не продане
+        if vehicle.status == 'sold':
+            await callback.answer("❌ Це авто вже продане", show_alert=True)
+            return
+        
         # Отримуємо користувача
         user = await db_manager.get_user_by_telegram_id(callback.from_user.id)
         user_id = user.id if user else None
         
         # Отримуємо всі авто для навігації
-        vehicles = await db_manager.get_vehicles(limit=50)
+        vehicles = await db_manager.get_available_vehicles(limit=50)
         
         # Знаходимо індекс поточного авто
         current_index = 0

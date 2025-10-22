@@ -87,24 +87,55 @@ async def render_saved_vehicle_card(message: Message, vehicle, index: int, total
     # Отримуємо клавіатуру
     keyboard = get_saved_vehicle_card_keyboard(vehicle.id, index, total)
     
-    # Якщо є фото - показуємо з фото
+    # Якщо є фото/відео - показуємо з медіа
     if photo_file_id:
+        # Визначаємо тип: фото чи відео (префікс video:)
+        is_video = isinstance(photo_file_id, str) and photo_file_id.startswith("video:")
+        file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
+        media_type = "video" if is_video else "photo"
         
         try:
             await message.edit_media(
-                media={"type": "photo", "media": photo_file_id, "caption": card_text, "parse_mode": get_default_parse_mode()},
+                media={"type": media_type, "media": file_id, "caption": card_text, "parse_mode": get_default_parse_mode()},
                 reply_markup=keyboard
             )
         except Exception as e:
             # Якщо не вдалося edit_media, видаляємо і створюємо нове
             logger.warning(f"Не вдалося edit_media: {e}")
             await message.delete()
-            await message.answer_photo(
-                photo=photo_file_id,
-                caption=card_text,
-                reply_markup=keyboard,
-                parse_mode=get_default_parse_mode(),
-            )
+            
+            if is_video:
+                try:
+                    await message.answer_video(
+                        video=file_id,
+                        caption=card_text,
+                        reply_markup=keyboard,
+                        parse_mode=get_default_parse_mode(),
+                    )
+                except Exception as video_error:
+                    logger.warning(f"⚠️ Не вдалося відправити відео для збереженого авто: {video_error}")
+                    # Якщо відео недійсне, відправляємо тільки текст
+                    await message.answer(
+                        card_text,
+                        reply_markup=keyboard,
+                        parse_mode=get_default_parse_mode(),
+                    )
+            else:
+                try:
+                    await message.answer_photo(
+                        photo=file_id,
+                        caption=card_text,
+                        reply_markup=keyboard,
+                        parse_mode=get_default_parse_mode(),
+                    )
+                except Exception as photo_error:
+                    logger.warning(f"⚠️ Не вдалося відправити фото для збереженого авто: {photo_error}")
+                    # Якщо фото недійсне, відправляємо тільки текст
+                    await message.answer(
+                        card_text,
+                        reply_markup=keyboard,
+                        parse_mode=get_default_parse_mode(),
+                    )
     else:
         # Без фото
         try:

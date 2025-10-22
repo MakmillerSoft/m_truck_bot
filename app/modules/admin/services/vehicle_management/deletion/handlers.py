@@ -40,10 +40,16 @@ async def confirm_vehicle_deletion(callback: CallbackQuery, state: FSMContext):
         vehicle = await db_manager.get_vehicle_by_id(vehicle_id)
         
         if not vehicle:
-            await callback.message.edit_text(
-                "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.edit_text(
+                    "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                await callback.message.answer(
+                    "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
+                    parse_mode="HTML"
+                )
             return
         
         # Форматуємо картку авто для показу
@@ -65,18 +71,35 @@ async def confirm_vehicle_deletion(callback: CallbackQuery, state: FSMContext):
         
         # Відправляємо попередження з фото або без
         if photo_file_id:
-            await callback.message.answer_photo(
-                photo=photo_file_id,
-                caption=warning_text,
-                reply_markup=get_deletion_confirmation_keyboard(vehicle_id),
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.answer_photo(
+                    photo=photo_file_id,
+                    caption=warning_text,
+                    reply_markup=get_deletion_confirmation_keyboard(vehicle_id),
+                    parse_mode="HTML"
+                )
+            except Exception as photo_error:
+                logger.warning(f"⚠️ Не вдалося відправити фото для авто {vehicle_id}: {photo_error}")
+                # Якщо фото недійсне, відправляємо тільки текст
+                await callback.message.answer(
+                    warning_text,
+                    reply_markup=get_deletion_confirmation_keyboard(vehicle_id),
+                    parse_mode="HTML"
+                )
         else:
-            await callback.message.edit_text(
-                warning_text,
-                reply_markup=get_deletion_confirmation_keyboard(vehicle_id),
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.edit_text(
+                    warning_text,
+                    reply_markup=get_deletion_confirmation_keyboard(vehicle_id),
+                    parse_mode="HTML"
+                )
+            except Exception as edit_error:
+                # Якщо не можемо редагувати (повідомлення з медіа), відправляємо нове
+                await callback.message.answer(
+                    warning_text,
+                    reply_markup=get_deletion_confirmation_keyboard(vehicle_id),
+                    parse_mode="HTML"
+                )
         
         # Зберігаємо ID авто в стані для подальшого використання
         await state.update_data(vehicle_to_delete_id=vehicle_id)
@@ -85,10 +108,16 @@ async def confirm_vehicle_deletion(callback: CallbackQuery, state: FSMContext):
         
     except Exception as e:
         logger.error(f"❌ Помилка підтвердження видалення: {e}")
-        await callback.message.edit_text(
-            f"❌ <b>Помилка підтвердження видалення</b>\n\n{str(e)}",
-            parse_mode="HTML"
-        )
+        try:
+            await callback.message.edit_text(
+                f"❌ <b>Помилка підтвердження видалення</b>\n\n{str(e)}",
+                parse_mode="HTML"
+            )
+        except Exception:
+            await callback.message.answer(
+                f"❌ <b>Помилка підтвердження видалення</b>\n\n{str(e)}",
+                parse_mode="HTML"
+            )
 
 
 @router.callback_query(F.data.startswith("confirm_delete_vehicle_"))
@@ -106,20 +135,32 @@ async def delete_vehicle(callback: CallbackQuery, state: FSMContext):
         
         # Перевіряємо чи ID співпадають
         if vehicle_id != stored_vehicle_id:
-            await callback.message.edit_text(
-                "❌ <b>Помилка безпеки</b>\n\nID авто не співпадають. Операція скасована.",
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.edit_text(
+                    "❌ <b>Помилка безпеки</b>\n\nID авто не співпадають. Операція скасована.",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                await callback.message.answer(
+                    "❌ <b>Помилка безпеки</b>\n\nID авто не співпадають. Операція скасована.",
+                    parse_mode="HTML"
+                )
             return
         
         # Отримуємо авто перед видаленням для логування
         vehicle = await db_manager.get_vehicle_by_id(vehicle_id)
         
         if not vehicle:
-            await callback.message.edit_text(
-                "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.edit_text(
+                    "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                await callback.message.answer(
+                    "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
+                    parse_mode="HTML"
+                )
             return
         
         # Видаляємо авто з бази даних
@@ -127,15 +168,16 @@ async def delete_vehicle(callback: CallbackQuery, state: FSMContext):
         
         if success:
             # Форматуємо повідомлення про успішне видалення
+            price_text = f"{vehicle.price:,.0f} $" if vehicle.price is not None else "Не вказана"
             success_text = f"""✅ <b>АВТО УСПІШНО ВИДАЛЕНО</b>
 
 🚛 <b>Видалено авто:</b> {vehicle.brand or 'Без марки'} {vehicle.model or 'Без моделі'}
 📅 <b>Рік:</b> {vehicle.year or 'Не вказано'}
-💰 <b>Ціна:</b> {vehicle.price:,.0f} $ (якщо була вказана)
+💰 <b>Ціна:</b> {price_text}
 
 🗑️ <b>Видалено:</b>
 • Авто з бази даних
-• {len(vehicle.photos)} фото
+• {len(vehicle.photos) if vehicle.photos else 0} фото
 • Всі пов'язані дані
 
 <b>Операція завершена успішно!</b>"""
@@ -202,10 +244,16 @@ async def cancel_vehicle_deletion(callback: CallbackQuery, state: FSMContext):
         vehicle = await db_manager.get_vehicle_by_id(vehicle_id)
         
         if not vehicle:
-            await callback.message.edit_text(
-                "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.edit_text(
+                    "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                await callback.message.answer(
+                    "❌ <b>Помилка</b>\n\nАвто не знайдено в базі даних.",
+                    parse_mode="HTML"
+                )
             return
         
         # Форматуємо картку авто
@@ -221,12 +269,21 @@ async def cancel_vehicle_deletion(callback: CallbackQuery, state: FSMContext):
         
         # Відправляємо повідомлення про скасування
         if photo_file_id:
-            await callback.message.answer_photo(
-                photo=photo_file_id,
-                caption=cancelled_text,
-                reply_markup=get_deletion_cancelled_keyboard(vehicle_id),
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.answer_photo(
+                    photo=photo_file_id,
+                    caption=cancelled_text,
+                    reply_markup=get_deletion_cancelled_keyboard(vehicle_id),
+                    parse_mode="HTML"
+                )
+            except Exception as photo_error:
+                logger.warning(f"⚠️ Не вдалося відправити фото для авто {vehicle_id}: {photo_error}")
+                # Якщо фото недійсне, відправляємо тільки текст
+                await callback.message.answer(
+                    cancelled_text,
+                    reply_markup=get_deletion_cancelled_keyboard(vehicle_id),
+                    parse_mode="HTML"
+                )
         else:
             try:
                 await callback.message.edit_text(
@@ -235,7 +292,7 @@ async def cancel_vehicle_deletion(callback: CallbackQuery, state: FSMContext):
                     parse_mode="HTML"
                 )
             except Exception as edit_error:
-                # Якщо не можемо редагувати, відправляємо нове повідомлення
+                # Якщо не можемо редагувати (повідомлення з медіа), відправляємо нове повідомлення
                 await callback.message.answer(
                     cancelled_text,
                     reply_markup=get_deletion_cancelled_keyboard(vehicle_id),

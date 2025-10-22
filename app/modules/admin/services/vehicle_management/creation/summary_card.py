@@ -130,19 +130,37 @@ async def create_summary_card_with_photo(callback: CallbackQuery, state: FSMCont
         is_video = isinstance(first_photo, str) and first_photo.startswith("video:")
         file_id = first_photo.split(":", 1)[1] if is_video else first_photo
         if is_video:
-            await callback.message.answer_video(
-                video=file_id,
-                caption=summary_text,
-                reply_markup=summary_keyboard,
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.answer_video(
+                    video=file_id,
+                    caption=summary_text,
+                    reply_markup=summary_keyboard,
+                    parse_mode="HTML"
+                )
+            except Exception as video_error:
+                logger.warning(f"⚠️ Не вдалося відправити відео для картки: {video_error}")
+                # Якщо відео недійсне, відправляємо тільки текст
+                await callback.message.answer(
+                    summary_text,
+                    reply_markup=summary_keyboard,
+                    parse_mode="HTML"
+                )
         else:
-            await callback.message.answer_photo(
-                photo=file_id,
-                caption=summary_text,
-                reply_markup=summary_keyboard,
-                parse_mode="HTML"
-            )
+            try:
+                await callback.message.answer_photo(
+                    photo=file_id,
+                    caption=summary_text,
+                    reply_markup=summary_keyboard,
+                    parse_mode="HTML"
+                )
+            except Exception as photo_error:
+                logger.warning(f"⚠️ Не вдалося відправити фото для картки: {photo_error}")
+                # Якщо фото недійсне, відправляємо тільки текст
+                await callback.message.answer(
+                    summary_text,
+                    reply_markup=summary_keyboard,
+                    parse_mode="HTML"
+                )
     except Exception as e:
         logger.error(f"📷 Помилка відправки фото: {e}")
         # Якщо не вдалося відправити фото, відправляємо тільки текст

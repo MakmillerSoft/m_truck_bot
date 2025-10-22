@@ -512,12 +512,21 @@ async def back_to_summary_card(callback: CallbackQuery, state: FSMContext):
             from ..listing.keyboards import get_vehicle_detail_keyboard
             
             if photo_file_id:
-                await callback.message.answer_photo(
-                    photo=photo_file_id,
-                    caption=summary_text,
-                    reply_markup=get_vehicle_detail_keyboard(vehicle_id),
-                    parse_mode=get_default_parse_mode()
-                )
+                try:
+                    await callback.message.answer_photo(
+                        photo=photo_file_id,
+                        caption=summary_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id),
+                        parse_mode=get_default_parse_mode()
+                    )
+                except Exception as photo_error:
+                    logger.warning(f"⚠️ Не вдалося відправити фото для авто {vehicle_id}: {photo_error}")
+                    # Якщо фото недійсне, відправляємо тільки текст
+                    await callback.message.answer(
+                        summary_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id),
+                        parse_mode=get_default_parse_mode()
+                    )
             else:
                 await callback.message.answer(
                     summary_text,
@@ -551,12 +560,21 @@ async def back_to_summary_card(callback: CallbackQuery, state: FSMContext):
         
         if photos:
             # Відправляємо нове повідомлення з фото та оновленою карткою
-            await callback.message.answer_photo(
-                photo=photos[0],
-                caption=summary_text,
-                reply_markup=get_summary_card_keyboard(),
-                parse_mode=get_default_parse_mode()
-            )
+            try:
+                await callback.message.answer_photo(
+                    photo=photos[0],
+                    caption=summary_text,
+                    reply_markup=get_summary_card_keyboard(),
+                    parse_mode=get_default_parse_mode()
+                )
+            except Exception as photo_error:
+                logger.warning(f"⚠️ Не вдалося відправити фото для нового авто: {photo_error}")
+                # Якщо фото недійсне, відправляємо тільки текст
+                await callback.message.answer(
+                    summary_text,
+                    reply_markup=get_summary_card_keyboard(),
+                    parse_mode=get_default_parse_mode()
+                )
         else:
             # Відправляємо нове повідомлення тільки з текстом
             await callback.message.answer(

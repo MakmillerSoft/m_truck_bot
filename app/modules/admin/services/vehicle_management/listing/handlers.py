@@ -178,19 +178,37 @@ async def view_vehicle_detail(callback: CallbackQuery, state: FSMContext):
             file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
             
             if is_video:
-                await callback.message.answer_video(
-                    video=file_id,
-                    caption=detail_text,
-                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
-                    parse_mode="HTML"
-                )
+                try:
+                    await callback.message.answer_video(
+                        video=file_id,
+                        caption=detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
+                except Exception as video_error:
+                    logger.warning(f"⚠️ Не вдалося відправити відео для авто {vehicle_id}: {video_error}")
+                    # Якщо відео недійсне, відправляємо тільки текст
+                    await callback.message.answer(
+                        detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
             else:
-                await callback.message.answer_photo(
-                    photo=file_id,
-                    caption=detail_text,
-                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
-                    parse_mode="HTML"
-                )
+                try:
+                    await callback.message.answer_photo(
+                        photo=file_id,
+                        caption=detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
+                except Exception as photo_error:
+                    logger.warning(f"⚠️ Не вдалося відправити фото для авто {vehicle_id}: {photo_error}")
+                    # Якщо фото недійсне, відправляємо тільки текст
+                    await callback.message.answer(
+                        detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
         else:
             await callback.message.edit_text(
                 detail_text,
@@ -1027,19 +1045,37 @@ async def send_vehicle_card_message(callback: CallbackQuery, vehicle_id: int):
             file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
             
             if is_video:
-                await callback.message.answer_video(
-                    video=file_id,
-                    caption=detail_text,
-                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
-                    parse_mode="HTML"
-                )
+                try:
+                    await callback.message.answer_video(
+                        video=file_id,
+                        caption=detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
+                except Exception as video_error:
+                    logger.warning(f"⚠️ Не вдалося відправити відео для авто {vehicle_id}: {video_error}")
+                    # Якщо відео недійсне, відправляємо тільки текст
+                    await callback.message.answer(
+                        detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
             else:
-                await callback.message.answer_photo(
-                    photo=file_id,
-                    caption=detail_text,
-                    reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
-                    parse_mode="HTML"
-                )
+                try:
+                    await callback.message.answer_photo(
+                        photo=file_id,
+                        caption=detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
+                except Exception as photo_error:
+                    logger.warning(f"⚠️ Не вдалося відправити фото для авто {vehicle_id}: {photo_error}")
+                    # Якщо фото недійсне, відправляємо тільки текст
+                    await callback.message.answer(
+                        detail_text,
+                        reply_markup=get_vehicle_detail_keyboard(vehicle_id, vehicle.status.value if vehicle.status else "available", vehicle.group_message_id),
+                        parse_mode="HTML"
+                    )
         else:
             # Якщо немає фото, відправляємо тільки текст
             await callback.message.answer(

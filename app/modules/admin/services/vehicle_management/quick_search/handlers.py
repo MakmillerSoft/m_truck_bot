@@ -195,19 +195,37 @@ async def search_by_id_process(message: Message, state: FSMContext):
                 file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
                 
                 if is_video:
-                    await message.answer_video(
-                        video=file_id,
-                        caption=detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
+                    try:
+                        await message.answer_video(
+                            video=file_id,
+                            caption=detail_text,
+                            parse_mode="HTML",
+                            reply_markup=keyboard
+                        )
+                    except Exception as video_error:
+                        logger.warning(f"⚠️ Не вдалося відправити відео для авто: {video_error}")
+                        # Якщо відео недійсне, відправляємо тільки текст
+                        await message.answer(
+                            detail_text,
+                            parse_mode="HTML",
+                            reply_markup=keyboard
+                        )
                 else:
-                    await message.answer_photo(
-                        photo=file_id,
-                        caption=detail_text,
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
+                    try:
+                        await message.answer_photo(
+                            photo=file_id,
+                            caption=detail_text,
+                            parse_mode="HTML",
+                            reply_markup=keyboard
+                        )
+                    except Exception as photo_error:
+                        logger.warning(f"⚠️ Не вдалося відправити фото для авто: {photo_error}")
+                        # Якщо фото недійсне, відправляємо тільки текст
+                        await message.answer(
+                            detail_text,
+                            parse_mode="HTML",
+                            reply_markup=keyboard
+                        )
             else:
                 await message.answer(
                     detail_text,
@@ -696,9 +714,19 @@ async def _show_search_result_vehicle(message: Message, vehicle, index: int, tot
         file_id = photo_file_id.split(":", 1)[1] if is_video else photo_file_id
         
         if is_video:
-            await message.answer_video(video=file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+            try:
+                await message.answer_video(video=file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+            except Exception as video_error:
+                logger.warning(f"⚠️ Не вдалося відправити відео для авто: {video_error}")
+                # Якщо відео недійсне, відправляємо тільки текст
+                await message.answer(detail_text, parse_mode="HTML", reply_markup=keyboard)
         else:
-            await message.answer_photo(photo=file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+            try:
+                await message.answer_photo(photo=file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+            except Exception as photo_error:
+                logger.warning(f"⚠️ Не вдалося відправити фото для авто: {photo_error}")
+                # Якщо фото недійсне, відправляємо тільки текст
+                await message.answer(detail_text, parse_mode="HTML", reply_markup=keyboard)
     else:
         await message.answer(detail_text, parse_mode="HTML", reply_markup=keyboard)
 
@@ -762,7 +790,12 @@ async def navigate_search_prev(callback: CallbackQuery, state: FSMContext):
         
         if photo_file_id:
             await callback.message.delete()
-            await callback.message.answer_photo(photo=photo_file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+            try:
+                await callback.message.answer_photo(photo=photo_file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+            except Exception as photo_error:
+                logger.warning(f"⚠️ Не вдалося відправити фото для авто: {photo_error}")
+                # Якщо фото недійсне, відправляємо тільки текст
+                await callback.message.answer(detail_text, parse_mode="HTML", reply_markup=keyboard)
         else:
             await callback.message.edit_text(detail_text, parse_mode="HTML", reply_markup=keyboard)
         
@@ -809,7 +842,12 @@ async def navigate_search_next(callback: CallbackQuery, state: FSMContext):
         
         if photo_file_id:
             await callback.message.delete()
-            await callback.message.answer_photo(photo=photo_file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+            try:
+                await callback.message.answer_photo(photo=photo_file_id, caption=detail_text, parse_mode="HTML", reply_markup=keyboard)
+            except Exception as photo_error:
+                logger.warning(f"⚠️ Не вдалося відправити фото для авто: {photo_error}")
+                # Якщо фото недійсне, відправляємо тільки текст
+                await callback.message.answer(detail_text, parse_mode="HTML", reply_markup=keyboard)
         else:
             await callback.message.edit_text(detail_text, parse_mode="HTML", reply_markup=keyboard)
         

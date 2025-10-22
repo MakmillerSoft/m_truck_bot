@@ -880,11 +880,62 @@ class DatabaseManager:
                     vehicles.append(VehicleModel(**vehicle_data))
                 return vehicles
 
+    async def get_available_vehicles(
+        self, limit: int = 20, offset: int = 0, sort_by: str = "created_at_desc"
+    ) -> List[VehicleModel]:
+        """Отримати список доступних авто (не проданих) для клієнтів"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            
+            # Визначаємо порядок сортування
+            order_clause = "ORDER BY created_at DESC"  # За замовчуванням
+            if sort_by == "created_at_asc":
+                order_clause = "ORDER BY created_at ASC"
+            elif sort_by == "created_at_desc":
+                order_clause = "ORDER BY created_at DESC"
+            elif sort_by == "price_asc":
+                order_clause = "ORDER BY price ASC"
+            elif sort_by == "price_desc":
+                order_clause = "ORDER BY price DESC"
+            elif sort_by == "year_asc":
+                order_clause = "ORDER BY year ASC"
+            elif sort_by == "year_desc":
+                order_clause = "ORDER BY year DESC"
+            elif sort_by == "brand_asc":
+                order_clause = "ORDER BY brand ASC"
+            elif sort_by == "brand_desc":
+                order_clause = "ORDER BY brand DESC"
+            
+            async with db.execute(
+                f"""
+                SELECT * FROM vehicles 
+                WHERE is_active = 1 AND (status IS NULL OR status != 'sold')
+                {order_clause}
+                LIMIT ? OFFSET ?
+            """,
+                (limit, offset),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                vehicles = []
+                for row in rows:
+                    vehicle_data = self._process_vehicle_data(dict(row))
+                    vehicles.append(VehicleModel(**vehicle_data))
+                return vehicles
+
     async def get_vehicles_count(self) -> int:
         """Отримати загальну кількість активних авто"""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
                 "SELECT COUNT(*) as count FROM vehicles WHERE is_active = 1"
+            ) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else 0
+
+    async def get_available_vehicles_count(self) -> int:
+        """Отримати кількість доступних авто (не проданих) для клієнтів"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT COUNT(*) as count FROM vehicles WHERE is_active = 1 AND (status IS NULL OR status != 'sold')"
             ) as cursor:
                 row = await cursor.fetchone()
                 return row[0] if row else 0
@@ -898,6 +949,7 @@ class DatabaseManager:
                 """
                 SELECT * FROM vehicles 
                 WHERE is_active = 1 
+                AND (status IS NULL OR status != 'sold')
                 AND (LOWER(brand) LIKE ? OR LOWER(model) LIKE ?)
                 ORDER BY created_at DESC
             """,
@@ -1910,7 +1962,13 @@ class DatabaseManager:
             brand_like = f"%{brand}%"
             model_like = f"%{model}%"
             async with db.execute(
-                "SELECT * FROM vehicles WHERE brand LIKE ? AND model LIKE ?",
+                """
+                SELECT * FROM vehicles 
+                WHERE is_active = 1 
+                AND (status IS NULL OR status != 'sold')
+                AND brand LIKE ? AND model LIKE ?
+                ORDER BY created_at DESC
+                """,
                 (brand_like, model_like)
             ) as cursor:
                 rows = await cursor.fetchall()
@@ -1921,7 +1979,13 @@ class DatabaseManager:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
-                "SELECT * FROM vehicles WHERE year >= ? AND year <= ? ORDER BY year DESC",
+                """
+                SELECT * FROM vehicles 
+                WHERE is_active = 1 
+                AND (status IS NULL OR status != 'sold')
+                AND year >= ? AND year <= ? 
+                ORDER BY year DESC
+                """,
                 (year_from, year_to)
             ) as cursor:
                 rows = await cursor.fetchall()
@@ -1932,7 +1996,13 @@ class DatabaseManager:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
-                "SELECT * FROM vehicles WHERE price >= ? AND price <= ? ORDER BY price ASC",
+                """
+                SELECT * FROM vehicles 
+                WHERE is_active = 1 
+                AND (status IS NULL OR status != 'sold')
+                AND price >= ? AND price <= ? 
+                ORDER BY price ASC
+                """,
                 (price_from, price_to)
             ) as cursor:
                 rows = await cursor.fetchall()
