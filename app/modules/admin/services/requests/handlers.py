@@ -181,7 +181,6 @@ async def delete_request_ask(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("confirm_delete_request_"))
 async def confirm_delete_request(callback: CallbackQuery, state: FSMContext):
     """Підтверджене видалення заявки"""
-    await callback.answer()
     req_id = int(callback.data.split("_")[-1])
 
     # Видаляємо заявку з БД
@@ -196,14 +195,30 @@ async def confirm_delete_request(callback: CallbackQuery, state: FSMContext):
     
     logger.info(f"✅ Заявку {req_id} видалено адміном {callback.from_user.id}")
     
-    # Повертаємо до списку заявок
+    # Отримати збережені фільтри
     current_filters = await state.get_data()
     status_filter = current_filters.get("requests_status_filter", "all")
     sort = current_filters.get("requests_sort", "newest")
     page = current_filters.get("requests_page", 1)
     
-    # Викликаємо оновлення списку
-    callback.data = f"admin_requests:{status_filter}:{sort}:{page}"
-    await open_requests_callback(callback, state)
+    # Отримуємо заявки з урахуванням фільтрів
+    per_page = 10
+    offset = (page - 1) * per_page
+    requests = await db_manager.get_manager_requests(status_filter=status_filter, sort=sort, limit=per_page, offset=offset)
+    total = await db_manager.get_manager_requests_count(status_filter=status_filter)
+    stats = await db_manager.get_manager_requests_stats()
+    
+    # Форматуємо список
+    from .formatters import format_requests_list
+    from .keyboards import get_requests_main_keyboard
+    
+    text = format_requests_list(requests, status_filter=status_filter, sort=sort, page=page, total=total, per_page=per_page, stats=stats)
+    
+    # Оновлюємо повідомлення
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_requests_main_keyboard(requests, status_filter=status_filter, sort=sort, page=page, total=total, per_page=per_page),
+        parse_mode=get_default_parse_mode(),
+    )
 
 
