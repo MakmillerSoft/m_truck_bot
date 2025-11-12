@@ -2,6 +2,7 @@
 Підсумкова картка авто
 """
 import logging
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -540,6 +541,7 @@ async def publish_to_group_only(callback: CallbackQuery, state: FSMContext):
             # Оновлюємо авто в БД з інформацією про публікацію в групу
             await db_manager.update_vehicle(vehicle_id, {
                 'published_in_group': True,
+                'published_at': datetime.now(),
                 'group_message_id': group_message_id
             })
             
@@ -628,6 +630,7 @@ async def publish_to_both(callback: CallbackQuery, state: FSMContext):
             if vehicle_id and group_message_id:
                 await db_manager.update_vehicle(vehicle_id, {
                     'published_in_group': True,
+                    'published_at': datetime.now(),
                     'group_message_id': group_message_id
                 })
             

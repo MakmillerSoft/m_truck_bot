@@ -105,10 +105,10 @@ class ExcelExporter:
             # Фото
             "Кількість фото", "Головне фото",
             # Статус та активність
-            "Статус", "Активність", "Перегляди",
+            "Статус", "Активність",
             # Публікація
             "Опубліковано в групу", "Опубліковано в бот", "Дата публікації",
-            "ID повідомлення в групі", "ID повідомлення в боті",
+            "ID повідомлення в групі",
             # Дати
             "Дата зміни статусу", "Дата продажу",
             # Системні поля
@@ -173,13 +173,11 @@ class ExcelExporter:
                 # Статус та активність
                 safe_translate('status', vehicle.get('status')),  # ПЕРЕКЛАД
                 "Активне" if vehicle.get('is_active') else "Неактивне",
-                vehicle.get('views_count', '') or 0,
                 # Публікація
                 "Так" if vehicle.get('published_in_group') else "Ні",
                 "Так" if vehicle.get('published_in_bot') else "Ні",
                 vehicle.get('published_at', '') or "",
                 vehicle.get('group_message_id', '') or "",
-                vehicle.get('bot_message_id', '') or "",
                 # Дати
                 vehicle.get('status_changed_at', '') or "",
                 vehicle.get('sold_at', '') or "",

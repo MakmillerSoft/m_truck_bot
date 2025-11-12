@@ -2,6 +2,7 @@
 Модуль публікації авто в бот
 """
 import logging
+from datetime import datetime
 from typing import Dict, Any, List, TYPE_CHECKING
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -136,6 +137,7 @@ class BotPublisher:
             photos=vehicle_data.get('photos', []),
             main_photo=vehicle_data.get('main_photo'),
             published_in_bot=True,  # Позначаємо як опубліковане в бот
+            published_at=datetime.now(),  # Додаємо дату публікації
             is_active=True
         )
         

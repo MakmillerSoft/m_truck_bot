@@ -2,6 +2,7 @@
 Обробники для блоку "Всі авто"
 """
 import logging
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -598,7 +599,7 @@ async def publish_vehicle_to_group(callback: CallbackQuery, state: FSMContext):
             # Оновлюємо статус публікації в БД
             await db_manager.update_vehicle(vehicle_id, {
                 'published_in_group': True,
-                'published_at': None,  # Поки що не зберігаємо дату публікації
+                'published_at': datetime.now(),
                 'group_message_id': group_message_id
             })
             
