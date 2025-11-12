@@ -715,24 +715,6 @@ async def send_broadcast(callback: CallbackQuery, state: FSMContext):
     await state.set_state(BroadcastStates.waiting_for_topic)
 
 
-@router.callback_query(F.data.startswith("broadcast_topic_"))
-async def send_to_topic(callback: CallbackQuery, state: FSMContext):
-    """Відправка розсилки в обраний топик"""
-    await callback.answer()
-    
-    topic_part = callback.data.split("_")[2]
-    # "all" обробляється окремим обробником send_to_all_topics
-    # "general" обробляється тут
-    if topic_part == "general":
-        # Відправка у головний топік (без thread_id)
-        await _send_broadcast_to_chat(callback, state, thread_id=None)
-        return
-    
-    # Інакше - це thread_id конкретного топіка
-    thread_id = int(topic_part)
-    await _send_broadcast_to_chat(callback, state, thread_id=thread_id)
-
-
 @router.callback_query(F.data == "broadcast_topic_all")
 async def send_to_all_topics(callback: CallbackQuery, state: FSMContext):
     """Відправка розсилки у всі доступні гілки"""
@@ -846,6 +828,24 @@ async def send_to_all_topics(callback: CallbackQuery, state: FSMContext):
         await state.clear()
     else:
         await callback.answer(f"⚠️ Надіслано з помилками: {errors}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("broadcast_topic_"))
+async def send_to_topic(callback: CallbackQuery, state: FSMContext):
+    """Відправка розсилки в обраний топик"""
+    await callback.answer()
+    
+    topic_part = callback.data.split("_")[2]
+    
+    # "general" обробляється тут
+    if topic_part == "general":
+        # Відправка у головний топік (без thread_id)
+        await _send_broadcast_to_chat(callback, state, thread_id=None)
+        return
+    
+    # Інакше - це thread_id конкретного топіка
+    thread_id = int(topic_part)
+    await _send_broadcast_to_chat(callback, state, thread_id=thread_id)
 
 
 async def _send_broadcast_to_chat(callback: CallbackQuery, state: FSMContext, thread_id: int | None):
