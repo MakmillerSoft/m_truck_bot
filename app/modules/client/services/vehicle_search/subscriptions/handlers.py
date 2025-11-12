@@ -26,25 +26,18 @@ logger = logging.getLogger(__name__)
 
 # Мапінг типів авто
 VEHICLE_TYPE_MAP = {
-    "sub_type_container_carrier": "container_carrier",
-    "sub_type_semi_container_carrier": "semi_container_carrier",
+    # 4 об'єднані категорії → представницькі значення EN
+    "sub_type_tractors_and_semi": "saddle_tractor",
+    "sub_type_vans_and_refrigerators": "van",
     "sub_type_variable_body": "variable_body",
-    "sub_type_saddle_tractor": "saddle_tractor",
-    "sub_type_trailer": "trailer",
-    "sub_type_refrigerator": "refrigerator",
-    "sub_type_van": "van",
-    "sub_type_bus": "bus",
+    "sub_type_container_carriers": "container_carrier",
 }
 
 VEHICLE_TYPE_NAMES = {
-    "container_carrier": "Контейнеровози",
-    "semi_container_carrier": "Напівпричепи контейнеровози",
+    "saddle_tractor": "Сідельні тягачі та напівпричепи",
+    "van": "Вантажні фургони та рефрижератори",
     "variable_body": "Змінні кузови",
-    "saddle_tractor": "Сідельні тягачі",
-    "trailer": "Причіпи",
-    "refrigerator": "Рефрижератори",
-    "van": "Фургони",
-    "bus": "Буси",
+    "container_carrier": "Контейнеровози (з причепами)",
 }
 
 # Мапінг станів

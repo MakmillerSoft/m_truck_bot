@@ -12,10 +12,7 @@ from ..shared.modules.keyboards.main_keyboards import (
     get_admin_main_keyboard,
     get_admin_vehicles_keyboard,
     get_admin_users_keyboard,
-    get_admin_stats_keyboard,
     get_admin_broadcast_keyboard,
-    get_admin_settings_keyboard,
-    get_admin_reports_keyboard,
     get_back_to_main_keyboard
 )
 from ..shared.utils.callback_utils import safe_callback_answer
@@ -54,10 +51,9 @@ async def admin_main_callback(callback: CallbackQuery, state: FSMContext):
 <b>Доступні розділи:</b>
 • 🚛 <b>Управління авто</b> - додавання, редагування, публікація авто
 • 👥 <b>Користувачі</b> - управління користувачами бота
-• 📊 <b>Статистика</b> - аналітика та метрики
 • 📢 <b>Розсилка</b> - масові повідомлення користувачам
-• ⚙️ <b>Налаштування</b> - конфігурація бота
-• 📋 <b>Звіти</b> - детальні звіти по роботі
+• 📨 <b>Заявки</b> - перегляд та обробка заявок
+• 📤 <b>Експорт даних</b> - вивантаження даних в Excel
 
 Оберіть розділ для роботи:
 """
@@ -83,7 +79,6 @@ async def admin_vehicles_callback(callback: CallbackQuery, state: FSMContext):
 • ➕ <b>Додати авто</b> - створити нове оголошення
 • 📋 <b>Всі авто</b> - переглянути всі авто
 • 🔍 <b>Швидкий пошук</b> - знайти авто за критеріями
-• 📝 <b>Чернетки</b> - переглянути незавершені авто
 
 Оберіть дію:
 """
@@ -95,37 +90,7 @@ async def admin_vehicles_callback(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(F.data == "admin_drafts")
-async def admin_drafts_callback(callback: CallbackQuery, state: FSMContext):
-    """Чернетки авто"""
-    await safe_callback_answer(callback)
-    
-    drafts_text = """
-📝 <b>Чернетки авто</b>
-
-Функція чернеток буде реалізована в наступних версіях.
-
-<i>Тут будуть відображатися незавершені авто, які користувачі почали створювати, але не завершили процес.</i>
-"""
-    
-    # Створюємо клавіатуру з кнопкою "Назад"
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🔙 Назад",
-                    callback_data="admin_vehicles"
-                )
-            ]
-        ]
-    )
-    
-    await callback.message.edit_text(
-        drafts_text,
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
+# admin_drafts - функціонал чернеток видалено (не реалізовано)
 
 
 @router.callback_query(F.data == "admin_quick_search")
@@ -162,130 +127,14 @@ async def admin_users_callback(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(F.data == "admin_stats")
-async def admin_stats_callback(callback: CallbackQuery, state: FSMContext):
-    """Статистика"""
-    await safe_callback_answer(callback)
-    await state.clear()
-    
-    stats_text = """
-📊 <b>Статистика</b>
-
-<b>Доступні звіти:</b>
-• 📊 <b>Загальна статистика</b> - основні метрики бота
-• 🚛 <b>Статистика авто</b> - аналітика по авто
-• 👥 <b>Статистика користувачів</b> - метрики користувачів
-• 📈 <b>Аналітика</b> - детальна аналітика
-
-Оберіть тип звіту:
-"""
-    
-    await callback.message.edit_text(
-        stats_text,
-        reply_markup=get_admin_stats_keyboard(),
-        parse_mode="HTML"
-    )
+# admin_broadcast обробляється в app/modules/admin/services/broadcast/handlers.py
 
 
-@router.callback_query(F.data == "admin_broadcast")
-async def admin_broadcast_callback(callback: CallbackQuery, state: FSMContext):
-    """Розсилка"""
-    await safe_callback_answer(callback)
-    await state.clear()
-    
-    broadcast_text = """
-📢 <b>Розсилка</b>
-
-<b>Доступні дії:</b>
-• 📢 <b>Створити розсилку</b> - відправити повідомлення всім користувачам
-• 📋 <b>Історія розсилок</b> - переглянути попередні розсилки
-• ⚙️ <b>Налаштування розсилки</b> - конфігурація розсилки
-• 📊 <b>Статистика розсилок</b> - метрики розсилок
-
-Оберіть дію:
-"""
-    
-    await callback.message.edit_text(
-        broadcast_text,
-        reply_markup=get_admin_broadcast_keyboard(),
-        parse_mode="HTML"
-    )
+# admin_reports - функціонал звітів видалено (не реалізовано)
 
 
-@router.callback_query(F.data == "admin_settings")
-async def admin_settings_callback(callback: CallbackQuery, state: FSMContext):
-    """Налаштування"""
-    await safe_callback_answer(callback)
-    await state.clear()
-    
-    settings_text = """
-⚙️ <b>Налаштування</b>
-
-<b>Доступні налаштування:</b>
-• ⚙️ <b>Загальні налаштування</b> - основні параметри бота
-• 🔒 <b>Безпека</b> - налаштування безпеки
-• 🤖 <b>Налаштування бота</b> - конфігурація бота
-• 📢 <b>Налаштування групи</b> - параметри Telegram групи
-
-Оберіть розділ:
-"""
-    
-    await callback.message.edit_text(
-        settings_text,
-        reply_markup=get_admin_settings_keyboard(),
-        parse_mode="HTML"
-    )
-
-
-@router.callback_query(F.data == "admin_reports")
-async def admin_reports_callback(callback: CallbackQuery, state: FSMContext):
-    """Звіти"""
-    await safe_callback_answer(callback)
-    await state.clear()
-    
-    reports_text = """
-📋 <b>Звіти</b>
-
-<b>Доступні звіти:</b>
-• 📊 <b>Щоденний звіт</b> - звіт за сьогодні
-• 📈 <b>Тижневий звіт</b> - звіт за тиждень
-• 📅 <b>Місячний звіт</b> - звіт за місяць
-• 📋 <b>Кастомний звіт</b> - звіт за вибраний період
-
-Оберіть тип звіту:
-"""
-    
-    await callback.message.edit_text(
-        reports_text,
-        reply_markup=get_admin_reports_keyboard(),
-        parse_mode="HTML"
-    )
-
-
-# Заглушки для всіх інших callback'ів (крім реалізованих)
-@router.callback_query(F.data.startswith("admin_") & ~F.data.in_([
-    "admin_all_vehicles", 
-    "admin_all_users", 
-    "admin_search_users"
-]))
-async def admin_placeholder_callback(callback: CallbackQuery, state: FSMContext):
-    """Заглушка для всіх адмін callback'ів"""
-    await safe_callback_answer(callback, "🚧 Функція в розробці")
-    
-    placeholder_text = """
-🚧 <b>Функція в розробці</b>
-
-Ця функція ще не реалізована.
-Вона буде доступна в наступних версіях.
-
-🔙 Поверніться до головного меню.
-"""
-    
-    await callback.message.edit_text(
-        placeholder_text,
-        reply_markup=get_back_to_main_keyboard(),
-        parse_mode="HTML"
-    )
+# Заглушка видалена - всі основні функції реалізовані
+# Якщо потрібна заглушка для нових функцій, додайте їх окремо
 
 
 @router.callback_query(F.data == "back_to_bot")
@@ -314,10 +163,9 @@ async def admin_command(message: Message):
 <b>Доступні розділи:</b>
 • 🚛 <b>Управління авто</b> - додавання, редагування, публікація авто
 • 👥 <b>Користувачі</b> - управління користувачами бота
-• 📊 <b>Статистика</b> - аналітика та метрики
 • 📢 <b>Розсилка</b> - масові повідомлення користувачам
-• ⚙️ <b>Налаштування</b> - конфігурація бота
-• 📋 <b>Звіти</b> - детальні звіти по роботі
+• 📨 <b>Заявки</b> - перегляд та обробка заявок
+• 📤 <b>Експорт даних</b> - вивантаження даних в Excel
 
 Оберіть розділ для роботи:
 """

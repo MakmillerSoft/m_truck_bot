@@ -13,6 +13,7 @@ from .services.vehicle_management import router as vehicle_management_router
 from .services.user_management import user_management_router
 from .services.requests import router as requests_router
 from .services.broadcast import broadcast_router
+from .services.export import export_router
 # from .services.analytics import router as analytics_router
 # from .services.communication import router as communication_router
 # from .services.settings import router as settings_router
@@ -22,6 +23,7 @@ router.include_router(vehicle_management_router)
 router.include_router(user_management_router)
 router.include_router(requests_router)
 router.include_router(broadcast_router)
+router.include_router(export_router)
 # router.include_router(analytics_router)
 # router.include_router(communication_router)
 # router.include_router(settings_router)

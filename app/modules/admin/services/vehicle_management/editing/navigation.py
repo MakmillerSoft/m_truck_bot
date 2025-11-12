@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from app.utils.formatting import get_default_parse_mode
 from app.modules.admin.core.access_control import AdminAccessFilter
 from .states import VehicleEditingStates
-from .keyboards import get_editing_menu_keyboard
+from .keyboards import get_editing_menu_keyboard, get_vehicle_type_reply_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -96,20 +96,30 @@ async def process_field_edit(callback: CallbackQuery, state: FSMContext, field_n
 @router.message(VehicleEditingStates.waiting_for_vehicle_type_edit)
 async def process_vehicle_type_edit(message: Message, state: FSMContext):
     """Обробити редагування типу авто"""
-    new_value = message.text.strip()
+    new_value = (message.text or "").strip()
     
     # Валідація типу авто
     valid_types = [
-        "Контейнеровози", "Напівпричепи контейнеровози", "Змінні кузови",
-        "Сідельні тягачі", "Причіпи", "Рефрижератори", "Фургони", "Буси"
+        "Сідельні тягачі та напівпричепи",
+        "Вантажні фургони та рефрижератори",
+        "Змінні кузови",
+        "Контейнеровози (з причепами)",
     ]
     
     if new_value not in valid_types:
+        options = "\n".join([f"• {opt}" for opt in valid_types])
         await message.answer(
-            "❌ Невірний тип авто. Оберіть з доступних варіантів:",
-            reply_markup=get_editing_menu_keyboard(await state.get_data())
+            f"❌ Невірний тип авто. Оберіть один з варіантів:\n\n{options}",
+            reply_markup=get_vehicle_type_reply_keyboard()
         )
         return
+
+    # При валідному виборі — прибираємо клавіатуру
+    try:
+        from aiogram.types import ReplyKeyboardRemove
+        await message.answer("✅ Тип авто оновлено", reply_markup=ReplyKeyboardRemove())
+    except Exception:
+        pass
     
     # Створюємо фейковий callback для обробки
     class FakeCallback:

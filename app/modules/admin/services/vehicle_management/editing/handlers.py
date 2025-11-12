@@ -13,13 +13,35 @@ from .keyboards import (
     get_editing_menu_keyboard,
     get_field_editing_keyboard,
     get_editing_confirmation_keyboard,
-    get_changes_info_keyboard
+    get_changes_info_keyboard,
+    get_vehicle_type_reply_keyboard,
+    get_vehicle_type_inline_keyboard
 )
 from .navigation import process_field_edit
 from ..shared.translations import translate_field_value, reverse_translate_field_value
 
 logger = logging.getLogger(__name__)
 router = Router()
+@router.callback_query(F.data.startswith("edit_type_"))
+async def process_vehicle_type_inline(callback: CallbackQuery, state: FSMContext):
+    """Обробити вибір типу авто через інлайн-кнопки (4 категорії)."""
+    await callback.answer()
+    data_key = callback.data.replace("edit_type_", "")
+    mapping = {
+        "tractors_and_semi": "Сідельні тягачі та напівпричепи",
+        "vans_and_refrigerators": "Вантажні фургони та рефрижератори",
+        "variable_body": "Змінні кузови",
+        "container_carriers": "Контейнеровози (з причепами)",
+    }
+    new_value = mapping.get(data_key)
+    if not new_value:
+        await callback.message.answer("❌ Невідомий тип")
+        return
+    # Оновлюємо значення через спільну функцію
+    await process_field_edit(callback, state, "vehicle_type", new_value)
+    # Повертаємося до меню редагування
+    await show_editing_menu(callback, state)
+
 
 # Застосовуємо фільтр доступу
 router.callback_query.filter(AdminAccessFilter())
@@ -174,6 +196,13 @@ async def edit_specific_field(callback: CallbackQuery, state: FSMContext):
         await state.set_state(target_state)
         # Зберігаємо назву поля для подальшого використання
         await state.update_data(editing_field=field_name)
+        # Якщо редагуємо тип авто — показуємо інлайн-клавіатуру з 4 категоріями
+        if field_name == "vehicle_type":
+            await callback.message.answer(
+                "Оберіть тип авто:",
+                reply_markup=get_vehicle_type_inline_keyboard(),
+                parse_mode=get_default_parse_mode()
+            )
     
     logger.info(f"✏️ Почато редагування поля {field_name} для користувача {callback.from_user.id}")
 
@@ -426,6 +455,34 @@ async def back_to_summary_card(callback: CallbackQuery, state: FSMContext):
             
             if success:
                 logger.info(f"✅ Зміни збережено в БД для авто ID {vehicle_id}")
+                # Перезавантажуємо актуальні дані з БД і оновлюємо FSM
+                vehicle = await db_manager.get_vehicle_by_id(vehicle_id)
+                if vehicle:
+                    # Оновлюємо FSM з актуальними даними з БД
+                    await state.update_data(
+                        vehicle_type=vehicle.vehicle_type.value,
+                        brand=vehicle.brand,
+                        model=vehicle.model,
+                        vin_code=vehicle.vin_code,
+                        body_type=vehicle.body_type,
+                        year=vehicle.year,
+                        condition=vehicle.condition.value if vehicle.condition else None,
+                        price=vehicle.price,
+                        mileage=vehicle.mileage,
+                        fuel_type=vehicle.fuel_type,
+                        engine_volume=vehicle.engine_volume,
+                        power_hp=vehicle.power_hp,
+                        transmission=vehicle.transmission,
+                        wheel_radius=vehicle.wheel_radius,
+                        load_capacity=vehicle.load_capacity,
+                        total_weight=vehicle.total_weight,
+                        cargo_dimensions=vehicle.cargo_dimensions,
+                        location=vehicle.location,
+                        description=vehicle.description,
+                        photos=vehicle.photos or [],
+                        main_photo=vehicle.main_photo,
+                    )
+                    logger.info(f"✅ FSM оновлено актуальними даними з БД для авто ID {vehicle_id}")
             else:
                 logger.error(f"❌ Помилка збереження змін в БД для авто ID {vehicle_id}")
     
@@ -446,6 +503,11 @@ async def back_to_summary_card(callback: CallbackQuery, state: FSMContext):
             vehicle = await db_manager.get_vehicle_by_id(vehicle_id)
             if vehicle:
                 summary_text, photo_file_id = format_admin_vehicle_card(vehicle)
+                # Перевіряємо валідність photo_file_id перед використанням
+                from ..listing.formatters import _is_valid_file_id
+                if photo_file_id and not _is_valid_file_id(photo_file_id):
+                    logger.warning(f"⚠️ Невірний photo_file_id для авто {vehicle_id}: {photo_file_id}")
+                    photo_file_id = None
             else:
                 summary_text = "❌ Авто не знайдено в базі даних"
                 photo_file_id = None
@@ -513,12 +575,22 @@ async def back_to_summary_card(callback: CallbackQuery, state: FSMContext):
             
             if photo_file_id:
                 try:
-                    await callback.message.answer_photo(
-                        photo=photo_file_id,
-                        caption=summary_text,
-                        reply_markup=get_vehicle_detail_keyboard(vehicle_id),
-                        parse_mode=get_default_parse_mode()
-                    )
+                    # Перевіряємо чи це відео (з префіксом video:)
+                    if photo_file_id.startswith("video:"):
+                        actual_file_id = photo_file_id.replace("video:", "")
+                        await callback.message.answer_video(
+                            video=actual_file_id,
+                            caption=summary_text,
+                            reply_markup=get_vehicle_detail_keyboard(vehicle_id),
+                            parse_mode=get_default_parse_mode()
+                        )
+                    else:
+                        await callback.message.answer_photo(
+                            photo=photo_file_id,
+                            caption=summary_text,
+                            reply_markup=get_vehicle_detail_keyboard(vehicle_id),
+                            parse_mode=get_default_parse_mode()
+                        )
                 except Exception as photo_error:
                     logger.warning(f"⚠️ Не вдалося відправити фото для авто {vehicle_id}: {photo_error}")
                     # Якщо фото недійсне, відправляємо тільки текст

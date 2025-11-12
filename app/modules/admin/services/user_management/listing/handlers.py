@@ -34,12 +34,12 @@ async def show_all_users(callback: CallbackQuery, state: FSMContext):
         # Отримуємо статистику
         stats = await db_manager.get_users_statistics()
         
-        # Отримуємо першу сторінку користувачів (10 штук) з сортуванням за датою
-        users = await db_manager.get_users(limit=10, offset=0, sort_by="created_at_desc")
+        # Отримуємо першу сторінку користувачів з сортуванням за датою
+        users = await db_manager.get_users(limit=settings.page_size, offset=0, sort_by="created_at_desc")
         
         # Отримуємо загальну кількість сторінок
         total_users = stats['total_users']
-        total_pages = (total_users + 9) // 10  # Округлення вгору
+        total_pages = (total_users + settings.page_size - 1) // settings.page_size  # Округлення вгору
         
         # Форматуємо заголовок
         header_text = format_users_list_header(
@@ -96,8 +96,8 @@ async def navigate_users_page(callback: CallbackQuery, state: FSMContext):
             return
         
         # Отримуємо користувачів для поточної сторінки
-        offset = (page - 1) * 10
-        users = await db_manager.get_users(limit=10, offset=offset, sort_by=sort_by, status_filter=status_filter)
+        offset = (page - 1) * settings.page_size
+        users = await db_manager.get_users(limit=settings.page_size, offset=offset, sort_by=sort_by, status_filter=status_filter)
         
         # Отримуємо статистику
         stats = await db_manager.get_users_statistics()
@@ -213,14 +213,14 @@ async def sort_users(callback: CallbackQuery, state: FSMContext):
         
         # Отримуємо користувачів з урахуванням статус фільтра та сортування
         users = await db_manager.get_users(
-            limit=10, 
-            offset=(current_page - 1) * 10, 
+            limit=settings.page_size, 
+            offset=(current_page - 1) * settings.page_size, 
             sort_by=sort_type,
             status_filter=status_filter
         )
         
         total_count = await db_manager.get_users_count(status_filter)
-        total_pages = (total_count + 9) // 10
+        total_pages = (total_count + settings.page_size - 1) // settings.page_size
         
         # Отримуємо статистику
         stats = await db_manager.get_users_statistics()
@@ -281,14 +281,14 @@ async def filter_users_by_status(callback: CallbackQuery, state: FSMContext):
         
         # Отримуємо користувачів з фільтрацією за статусом
         users = await db_manager.get_users(
-            limit=10, 
+            limit=settings.page_size, 
             offset=0, 
             sort_by=sort_by,
             status_filter=status_filter
         )
         
         total_count = await db_manager.get_users_count(status_filter)
-        total_pages = (total_count + 9) // 10
+        total_pages = (total_count + settings.page_size - 1) // settings.page_size
         
         # Отримуємо статистику
         stats = await db_manager.get_users_statistics()
@@ -630,8 +630,8 @@ async def back_to_users_list(callback: CallbackQuery, state: FSMContext):
         
         # Отримуємо користувачів
         users = await db_manager.get_users(
-            limit=10, 
-            offset=(current_page - 1) * 10, 
+            limit=settings.page_size, 
+            offset=(current_page - 1) * settings.page_size, 
             sort_by=sort_by,
             status_filter=status_filter
         )

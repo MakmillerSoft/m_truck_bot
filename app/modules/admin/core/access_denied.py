@@ -143,7 +143,7 @@ async def admin_callbacks_denied_broad(callback: CallbackQuery):
 # Перехоплювач для інших адмін-префіксів (vehicle, edit_, search_, publish_, back_to_ всередині адмінки, тощо)
 @router.callback_query(
     F.data.regexp(
-        r"^(add_vehicle|admin_all_vehicles|admin_quick_search|admin_drafts|"
+        r"^(add_vehicle|admin_all_vehicles|admin_quick_search|"
         r"skip_photos_add|skip_photos_replace|edit_vehicle_card|show_publication_options|"
         r"publish_to_bot_only|publish_to_group_only|publish_to_both|back_to_summary_card|"
         r"search_by_parameters|search_by_filter|search_by_id|search_by_vin|search_by_brand|"

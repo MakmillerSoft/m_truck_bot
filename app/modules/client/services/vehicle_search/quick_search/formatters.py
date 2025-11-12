@@ -7,124 +7,75 @@ from app.modules.admin.services.vehicle_management.shared.translations import tr
 
 
 def format_client_vehicle_card(vehicle: VehicleModel) -> Tuple[str, Optional[str]]:
-    """
-    Форматувати картку авто для клієнтської частини (БЕЗ системної інформації)
-    
-    Args:
-        vehicle: Об'єкт VehicleModel
-        
-    Returns:
-        tuple: (text, photo_file_id) - текст картки та file_id першого фото
-    """
-    # Заголовок
-    brand = vehicle.brand or "Без марки"
-    model = vehicle.model or "Без моделі"
-    text = f"🚛 <b>{brand} {model}</b>\n\n"
-    
-    # Основні характеристики (тільки заповнені)
-    main_specs = []
-    
-    # Тип авто (завжди є)
-    main_specs.append(f"• <b>Тип:</b> {translate_field_value('vehicle_type', vehicle.vehicle_type.value)}")
-    
-    # Рік
-    if vehicle.year:
-        main_specs.append(f"• <b>Рік:</b> {vehicle.year}")
-    
-    # Стан
-    if vehicle.condition:
-        main_specs.append(f"• <b>Стан:</b> {translate_field_value('condition', vehicle.condition.value)}")
-    
-    # Ціна
-    if vehicle.price:
-        main_specs.append(f"• <b>Ціна:</b> {vehicle.price:,.0f} $")
-    
-    # Пробіг
-    if vehicle.mileage:
-        main_specs.append(f"• <b>Пробіг:</b> {vehicle.mileage:,} км")
-    
-    # Додаємо основні характеристики
-    if main_specs:
-        text += "📋 <b>Основні характеристики:</b>\n"
-        text += "\n".join(main_specs) + "\n\n"
-    
-    # Технічні дані (тільки заповнені)
+    """Форматування картки авто для клієнта в боті (лише дозволені поля)."""
+    # Заголовок (верхній регістр)
+    brand = (vehicle.brand or "").strip()
+    model = (vehicle.model or "").strip()
+    text = f"🚚 <b>{(brand + ' ' + model).strip().upper()}</b>\n\n"
+
+    # Категорія
+    text += f"Категорія: {translate_field_value('vehicle_type', vehicle.vehicle_type.value)}\n\n"
+
+    # 🛠 ТЕХНІЧНІ ХАРАКТЕРИСТИКИ
     tech_specs = []
-    
-    # Двигун
-    engine_info = []
-    if vehicle.engine_volume:
-        engine_info.append(f"{vehicle.engine_volume} л")
-    if vehicle.power_hp:
-        engine_info.append(f"{vehicle.power_hp} к.с.")
-    
-    if engine_info:
-        tech_specs.append(f"• <b>Двигун:</b> {', '.join(engine_info)}")
-    
-    # Тип палива
-    if vehicle.fuel_type:
-        tech_specs.append(f"• <b>Паливо:</b> {translate_field_value('fuel_type', vehicle.fuel_type)}")
-    
-    # КПП
-    if vehicle.transmission:
-        tech_specs.append(f"• <b>КПП:</b> {translate_field_value('transmission', vehicle.transmission)}")
-    
-    # Тип кузова
+    if brand:
+        tech_specs.append(f"• <b>Марка:</b> {brand}")
+    if model:
+        tech_specs.append(f"• <b>Модель:</b> {model}")
+    if vehicle.year:
+        tech_specs.append(f"• <b>Рік випуску:</b> {vehicle.year}")
     if vehicle.body_type:
         tech_specs.append(f"• <b>Тип кузова:</b> {vehicle.body_type}")
-    
-    # Радіус коліс
-    if vehicle.wheel_radius:
-        tech_specs.append(f"• <b>Радіус коліс:</b> {vehicle.wheel_radius}")
-    
-    # Додаємо технічні дані
+    if vehicle.condition:
+        tech_specs.append(f"• <b>Стан:</b> {translate_field_value('condition', vehicle.condition.value)}")
+    if vehicle.mileage:
+        try:
+            tech_specs.append(f"• <b>Пробіг:</b> {int(vehicle.mileage):,} км".replace(',', ' '))
+        except Exception:
+            tech_specs.append(f"• <b>Пробіг:</b> {vehicle.mileage} км")
+    engine_bits = []
+    if vehicle.engine_volume:
+        engine_bits.append(f"{vehicle.engine_volume} л")
+    if vehicle.power_hp:
+        engine_bits.append(f"{vehicle.power_hp} к.с.")
+    if engine_bits:
+        tech_specs.append(f"• <b>Двигун:</b> {', '.join(engine_bits)}")
+    if vehicle.fuel_type:
+        tech_specs.append(f"• <b>Тип палива:</b> {translate_field_value('fuel_type', vehicle.fuel_type)}")
+    if vehicle.transmission:
+        tech_specs.append(f"• <b>КПП:</b> {translate_field_value('transmission', vehicle.transmission)}")
     if tech_specs:
-        text += "🔧 <b>Технічні дані:</b>\n"
-        text += "\n".join(tech_specs) + "\n\n"
-    
-    # Вантажні характеристики (тільки заповнені)
-    cargo_specs = []
-    
-    # Вантажопідйомність
-    if vehicle.load_capacity:
-        cargo_specs.append(f"• <b>Вантажопідйомність:</b> {vehicle.load_capacity:,} кг")
-    
-    # Загальна маса
-    if vehicle.total_weight:
-        cargo_specs.append(f"• <b>Загальна маса:</b> {vehicle.total_weight:,} кг")
-    
-    # Габарити
-    if vehicle.cargo_dimensions:
-        cargo_specs.append(f"• <b>Габарити:</b> {vehicle.cargo_dimensions}")
-    
-    # Додаємо вантажні характеристики
-    if cargo_specs:
-        text += "📦 <b>Вантажні характеристики:</b>\n"
-        text += "\n".join(cargo_specs) + "\n\n"
-    
-    # Додаткова інформація (тільки заповнена)
+        text += "🛠 <b>ТЕХНІЧНІ ХАРАКТЕРИСТИКИ:</b>\n" + "\n".join(tech_specs) + "\n\n"
+
+    # 🔗 ДОДАТКОВО
     additional_info = []
-    
-    # Місцезнаходження
     if vehicle.location:
         additional_info.append(f"• <b>Місцезнаходження:</b> {translate_field_value('location', vehicle.location)}")
-    
-    # VIN код
-    if vehicle.vin_code:
-        additional_info.append(f"• <b>VIN:</b> {vehicle.vin_code}")
-    
-    # Опис
     if vehicle.description:
-        # Обмежуємо довжину опису
-        description = vehicle.description[:200] + "..." if len(vehicle.description) > 200 else vehicle.description
-        additional_info.append(f"• <b>Опис:</b> {description}")
-    
-    # Додаємо додаткову інформацію
+        desc = vehicle.description[:200] + "..." if len(vehicle.description) > 200 else vehicle.description
+        additional_info.append(f"• <b>Опис:</b> {desc}")
     if additional_info:
-        text += "📍 <b>Додатково:</b>\n"
-        text += "\n".join(additional_info) + "\n\n"
+        text += "🔗 <b>ДОДАТКОВО:</b>\n" + "\n".join(additional_info) + "\n\n"
+
+    # 💳 ФІНАНСУВАННЯ
+    text += (
+        "💳 <b>ФІНАНСУВАННЯ:</b>\n"
+        "Консультація: кредит/лізинг\n"
+        "Розрахунок платежів, звертайтесь за номером:\n"
+        "📲 +380502311339\n\n"
+    )
+
+    # 💰 Вартість
+    if vehicle.price:
+        try:
+            price_text = f"{int(vehicle.price):,} $".replace(',', ' ')
+        except Exception:
+            price_text = f"{vehicle.price} $"
+        text += "💰 <b>Вартість:</b> " + price_text + "\n"
     
-    # СИСТЕМНА ІНФОРМАЦІЯ ПРИБРАНА ДЛЯ КЛІЄНТІВ
+    # ID авто (обов'язково для менеджерів)
+    if vehicle.id:
+        text += "\n" + f"🆔 {vehicle.id}"
     
     # Отримуємо головне медіа (фото або відео)
     photo_file_id = None

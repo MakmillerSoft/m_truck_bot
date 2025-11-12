@@ -3,11 +3,12 @@
 """
 from typing import Dict, Any, List
 from app.utils.formatting import get_default_parse_mode
-from ..shared.translations import translate_field_value
+from ..shared.translations import translate_field_value, reverse_translate_field_value
+from app.config.settings import settings
 
 
 def format_group_vehicle_card(data: Dict[str, Any]) -> str:
-    """Форматування картки авто для публікації в групу"""
+    """Форматування картки авто для публікації в групу (клієнтський варіант)."""
     
     # Отримуємо основні дані
     vehicle_type = data.get('vehicle_type', '')
@@ -28,101 +29,61 @@ def format_group_vehicle_card(data: Dict[str, Any]) -> str:
     body_type = data.get('body_type', '')
     location = data.get('location', '')
     description = data.get('description', '')
-    vin_code = data.get('vin_code', '')
-    
-    # Форматуємо заголовок
-    header = f"🚚 <b>{brand} {model}</b>"
+    # Форматуємо заголовок (верхній регістр)
+    header = f"🚚 <b>{(str(brand or '') + ' ' + str(model or '')).strip().upper()}</b>"
     
     # Збираємо картку
     card_lines = [header, ""]
     
-    # ОСНОВНІ ХАРАКТЕРИСТИКИ
-    main_specs = []
-    
-    # Категорія
+    # Категорія: клікабельна (посилання на топік)
     if vehicle_type:
-        translated_vehicle_type = translate_field_value('vehicle_type', vehicle_type)
-        main_specs.append(f"<b>Категорія:</b> {translated_vehicle_type}")
+        ua_type = translate_field_value('vehicle_type', vehicle_type)
+        try:
+            en_type = reverse_translate_field_value('vehicle_type', vehicle_type)
+            topic_id = settings.get_topic_id_for_vehicle_type(en_type)
+            if settings.group_chat_id and topic_id:
+                group_username = settings.group_chat_id.replace('@', '')
+                card_lines.append(f"Категорія: <a href=\"https://t.me/{group_username}?topic={topic_id}\">{ua_type}</a>")
+            else:
+                card_lines.append(f"Категорія: {ua_type}")
+        except Exception:
+            card_lines.append(f"Категорія: {ua_type}")
+        card_lines.append("")
     
-    # VIN
-    if vin_code:
-        main_specs.append(f"<b>VIN:</b> {vin_code}")
-    
-    # Марка
+    # 🛠 ТЕХНІЧНІ ХАРАКТЕРИСТИКИ
+    main_specs: List[str] = []
     if brand:
         main_specs.append(f"• <b>Марка:</b> {brand}")
-    
-    # Модель
     if model:
         main_specs.append(f"• <b>Модель:</b> {model}")
-    
-    # Рік випуску
     if year:
         main_specs.append(f"• <b>Рік випуску:</b> {year}")
-    
-    # Тип кузова
     if body_type:
         main_specs.append(f"• <b>Тип кузова:</b> {body_type}")
-    
-    # Стан
     if condition:
-        translated_condition = translate_field_value('condition', condition)
-        main_specs.append(f"• <b>Стан:</b> {translated_condition}")
-    
-    # Пробіг
+        main_specs.append(f"• <b>Стан:</b> {translate_field_value('condition', condition)}")
     if mileage:
-        main_specs.append(f"• <b>Пробіг:</b> {mileage} км")
-    
-    # Додаємо секцію тільки якщо є дані
-    if main_specs:
-        card_lines.append("📋 <b>ОСНОВНІ ХАРАКТЕРИСТИКИ:</b>")
-        card_lines.extend(main_specs)
-        card_lines.append("")  # Пустий рядок
-    
-    # ТЕХНІЧНІ ДАНІ
-    tech_specs = []
-    
-    # Двигун
-    engine_info = []
+        try:
+            main_specs.append(f"• <b>Пробіг:</b> {int(mileage):,} км".replace(',', ' '))
+        except Exception:
+            main_specs.append(f"• <b>Пробіг:</b> {mileage} км")
+    engine_bits: List[str] = []
     if engine_volume:
-        engine_info.append(f"{engine_volume} л")
+        engine_bits.append(f"{engine_volume} л")
     if power_hp:
-        engine_info.append(f"{power_hp} к.с.")
-    
-    if engine_info:
-        tech_specs.append(f"• <b>Двигун:</b> {', '.join(engine_info)}")
-    
-    # Тип палива
+        engine_bits.append(f"{power_hp} к.с.")
+    if engine_bits:
+        main_specs.append(f"• <b>Двигун:</b> {', '.join(engine_bits)}")
     if fuel_type:
-        translated_fuel = translate_field_value('fuel_type', fuel_type)
-        tech_specs.append(f"• <b>Тип палива:</b> {translated_fuel}")
-    
-    # КПП
+        main_specs.append(f"• <b>Тип палива:</b> {translate_field_value('fuel_type', fuel_type)}")
     if transmission:
-        translated_transmission = translate_field_value('transmission', transmission)
-        tech_specs.append(f"• <b>КПП:</b> {translated_transmission}")
+        main_specs.append(f"• <b>КПП:</b> {translate_field_value('transmission', transmission)}")
+    if main_specs:
+        card_lines.append("🛠 <b>ТЕХНІЧНІ ХАРАКТЕРИСТИКИ:</b>")
+        card_lines.extend(main_specs)
+        card_lines.append("")
     
-    # Загальна маса
-    if total_weight:
-        tech_specs.append(f"• <b>Загальна маса:</b> {total_weight} кг")
-    
-    # Вантажопідйомність
-    if load_capacity:
-        tech_specs.append(f"• <b>Вантажопідйомність:</b> {load_capacity} кг")
-    
-    # Радіус коліс
-    if wheel_radius:
-        tech_specs.append(f"• <b>Радіус коліс:</b> {wheel_radius}")
-    
-    # Габарити вантажного відсіку
-    if cargo_dimensions:
-        tech_specs.append(f"• <b>Габарити вантажного відсіку:</b> {cargo_dimensions}")
-    
-    # Додаємо секцію тільки якщо є дані
-    if tech_specs:
-        card_lines.append("🔧 <b>ТЕХНІЧНІ ДАНІ:</b>")
-        card_lines.extend(tech_specs)
-        card_lines.append("")  # Пустий рядок
+    # Прибираємо решту нестандартних технічних полів для клієнта
     
     # ДОДАТКОВО
     additional_specs = []
@@ -142,22 +103,31 @@ def format_group_vehicle_card(data: Dict[str, Any]) -> str:
         card_lines.extend(additional_specs)
         card_lines.append("")  # Пустий рядок
     
-    # Фінансування (завжди відображається)
-    card_lines.append("💳 <b>Фінансування (кредит, лізинг)</b>")
-    card_lines.append("Отримати консультацію, розрахунок платежів, за номером:")
-    card_lines.append("📞 <a href=\"tel:+380502311339\">+380502311339</a>")
+    # ФІНАНСУВАННЯ
+    card_lines.append("💳 <b>ФІНАНСУВАННЯ:</b>")
+    card_lines.append("Консультація: кредит/лізинг")
+    card_lines.append("Розрахунок платежів, звертайтесь за номером:")
+    card_lines.append("📲 <a href=\"tel:+380502311339\">+380502311339</a>")
     
     card_lines.append("")  # Пустий рядок
     
     # Вартість
     if price:
-        card_lines.append(f"💰 <b>Вартість: {price} $</b>")
+        try:
+            price_text = f"{int(price):,} $".replace(',', ' ')
+        except Exception:
+            price_text = f"{price} $"
+        card_lines.append("💰 <b>Вартість:</b> " + price_text)
     
-    # ID авто (тільки якщо є)
+    # ID авто (обов'язково для менеджерів)
     vehicle_id = data.get('vehicle_id')
+    if not vehicle_id:
+        # Спробуємо отримати з data['id'] або інших полів
+        vehicle_id = data.get('id')
+    
     if vehicle_id:
         card_lines.append("")  # Пустий рядок
-        card_lines.append(f"#{vehicle_id}")
+        card_lines.append(f"🆔 {vehicle_id}")
     
     return "\n".join(card_lines)
 
@@ -165,14 +135,10 @@ def format_group_vehicle_card(data: Dict[str, Any]) -> str:
 def get_vehicle_type_topic_mapping() -> Dict[str, int]:
     """Мапінг типів авто на ID топіків групи"""
     return {
-        "Сідельні тягачі": 18,
-        "Буси": 16,
-        "Фургони": 14,
+        "Вантажні фургони та рефрижератори": 14,
+        "Контейнеровози (з причепами)": 4,
+        "Сідельні тягачі та напівпричепи": 18,
         "Змінні кузови": 12,
-        "Причіпи": 10,
-        "Рефрижератори": 8,
-        "Напівпричепи контейнеровози": 6,
-        "Контейнеровози": 4
     }
 
 

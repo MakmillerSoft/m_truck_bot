@@ -12,6 +12,25 @@ from . import quick_search_router as router
 
 logger = logging.getLogger(__name__)
 
+CATALOG_GROUPS = {
+    # 4 об'єднані категорії → перелік внутрішніх типів EN
+    "tractors_and_semi": ["saddle_tractor", "semi_container_carrier"],
+    "vans_and_refrigerators": ["van", "refrigerator"],
+    "variable_body": ["variable_body"],
+    "container_carriers": ["container_carrier", "trailer"],
+}
+
+def get_catalog_type_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🚍 Вантажні фургони та рефрижератори", callback_data="client_catalog_type_vans_and_refrigerators")],
+            [InlineKeyboardButton(text="🚚 Контейнеровози (з причепами)", callback_data="client_catalog_type_container_carriers")],
+            [InlineKeyboardButton(text="🚛 Сідельні тягачі та напівпричепи", callback_data="client_catalog_type_tractors_and_semi")],
+            [InlineKeyboardButton(text="🚞 Змінні кузови", callback_data="client_catalog_type_variable_body")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="client_catalog_menu")],
+        ]
+    )
+
 @router.callback_query(F.data == "client_catalog_menu")
 async def show_catalog_menu(callback: CallbackQuery, state: FSMContext):
     """Проміжне меню каталогу: показує заголовок, кількість авто та 2 кнопки"""
@@ -21,14 +40,25 @@ async def show_catalog_menu(callback: CallbackQuery, state: FSMContext):
         total = await db_manager.get_available_vehicles_count()
     except Exception:
         total = 0
+    
     text = (
         "🚛 <b>Каталог авто</b>\n\n"
         f"Доступно авто: <b>{total}</b>\n\n"
-        "Оберіть дію нижче:"
+        "📖 <b>Як користуватися:</b>\n\n"
+        "<b>Варіант 1 - Всі авто:</b>\n"
+        "• Натисніть <b>\"📋 Всі авто\"</b> для перегляду всіх доступних авто\n"
+        "• Гортайте картки стрілками ⬅️ ➡️\n"
+        "• Збережіть улюблені: натисніть <b>\"❤️ Зберегти\"</b>\n"
+        "• Задайте питання: <b>\"📝 Залишити заявку\"</b> під карткою\n\n"
+        "<b>Варіант 2 - Пошук по параметрах:</b>\n"
+        "• Натисніть <b>\"🔍 Пошук по параметрах\"</b>\n"
+        "• Вкажіть марку, модель, рік або ціну\n"
+        "• Перегляньте відфільтровані результати\n\n"
+        "<i>Оберіть дію нижче:</i>"
     )
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Всі авто", callback_data="client_catalog")],
+            [InlineKeyboardButton(text="📋 Всі авто", callback_data="client_catalog_select_type")],
             [InlineKeyboardButton(text="🔍 Пошук по параметрах", callback_data="client_search")],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="client_back_to_main")],
         ]
@@ -42,6 +72,71 @@ async def show_catalog_menu(callback: CallbackQuery, state: FSMContext):
             pass
         await callback.message.answer(text, reply_markup=keyboard, parse_mode=get_default_parse_mode())
 
+
+@router.callback_query(F.data == "client_catalog_select_type")
+async def client_catalog_select_type(callback: CallbackQuery, state: FSMContext):
+    """Показати вибір категорії перед переглядом усіх авто"""
+    await callback.answer()
+    await state.clear()
+    text = (
+        "📋 <b>Всі авто</b>\n\n"
+        "Оберіть категорію, щоб переглядати лише відповідні авто."
+    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_catalog_type_keyboard(),
+            parse_mode=get_default_parse_mode(),
+        )
+    except Exception:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.message.answer(
+            text,
+            reply_markup=get_catalog_type_keyboard(),
+            parse_mode=get_default_parse_mode(),
+        )
+
+
+def _group_key_to_types(group_key: str) -> list:
+    return CATALOG_GROUPS.get(group_key, [])
+
+
+@router.callback_query(F.data.startswith("client_catalog_type_"))
+async def client_catalog_by_type(callback: CallbackQuery, state: FSMContext):
+    """Завантажити і показати першу картку для обраної категорії"""
+    await callback.answer()
+    group_key = callback.data.replace("client_catalog_type_", "")
+    types = _group_key_to_types(group_key)
+
+    vehicles = await db_manager.get_available_vehicles_by_types(types, limit=50)
+
+    if not vehicles:
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="client_catalog_select_type")]]
+        )
+        try:
+            await callback.message.edit_text(
+                "❌ Наразі немає авто в цій категорії.\n\nОберіть іншу категорію.",
+                reply_markup=keyboard,
+                parse_mode=get_default_parse_mode(),
+            )
+        except Exception:
+            await callback.message.answer(
+                "❌ Наразі немає авто в цій категорії.\n\nОберіть іншу категорію.",
+                reply_markup=keyboard,
+                parse_mode=get_default_parse_mode(),
+            )
+        return
+
+    # Зберігаємо список авто і поточний індекс
+    await state.update_data(all_vehicles=vehicles, current_index=0)
+
+    user = await db_manager.get_user_by_telegram_id(callback.from_user.id)
+    user_id = user.id if user else None
+    await show_vehicle_card(callback, vehicles[0], 0, len(vehicles), user_id)
 
 def get_quick_search_menu_keyboard() -> InlineKeyboardMarkup:
     """Клавіатура для меню швидкого пошуку"""
@@ -122,7 +217,7 @@ def get_vehicle_card_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="🔙 Назад", callback_data="client_catalog_menu"
+                text="🔙 Назад", callback_data="client_catalog_select_type"
             )
         ]
     )
@@ -303,7 +398,19 @@ async def show_quick_search(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
     
-    text = "🔍 <b>Швидкий пошук авто</b>\n\nОберіть дію нижче або поверніться назад."
+    text = (
+        "🔍 <b>Швидкий пошук авто</b>\n\n"
+        "📖 <b>Як це працює:</b>\n"
+        "• Оберіть тип пошуку нижче\n"
+        "• Вкажіть потрібні параметри (марка, модель, рік, ціна)\n"
+        "• Перегляньте відфільтровані результати\n"
+        "• Збережіть цікаві авто або залиште заявку\n\n"
+        "💡 <b>Можна шукати за:</b>\n"
+        "• 🏷️🚗 Марка та модель авто\n"
+        "• 📅 Рік випуску (від - до)\n"
+        "• 💰 Вартість (від - до)\n\n"
+        "<i>Оберіть тип пошуку нижче:</i>"
+    )
     
     try:
         await callback.message.edit_text(

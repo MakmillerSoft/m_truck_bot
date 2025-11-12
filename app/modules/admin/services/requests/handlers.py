@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from app.modules.admin.core.access_control import AdminAccessFilter
 from app.modules.database.manager import db_manager
 from app.utils.formatting import get_default_parse_mode
+from app.config.settings import settings
 from .keyboards import (
     get_requests_main_keyboard,
     get_request_detail_keyboard,
@@ -51,7 +52,7 @@ async def open_requests_callback(callback: CallbackQuery, state: FSMContext):
 
 
 async def show_requests_list(target_message: Message, status_filter: str = "all", sort: str = "newest", page: int = 1):
-    per_page = 10
+    per_page = settings.page_size
     total = await db_manager.get_manager_requests_count(status_filter=status_filter)
     stats = await db_manager.get_manager_requests_stats()
     offset = (page - 1) * per_page
@@ -115,7 +116,8 @@ async def toggle_request_status(callback: CallbackQuery, state: FSMContext):
         return
 
     new_status = "done" if r.get("status") != "done" else "new"
-    await db_manager.update_manager_request_status(req_id, new_status)
+    admin_id = callback.from_user.id
+    await db_manager.update_manager_request_status(req_id, new_status, admin_id)
 
     # Отримати збережені фільтри для навігації "Назад"
     current_filters = await state.get_data()

@@ -6,14 +6,15 @@ def translate_field_value(field_key: str, value: str) -> str:
     """Переклад значень полів з англійської на українську"""
     translations = {
         "vehicle_type": {
-            "container_carrier": "Контейнеровози",
-            "semi_container_carrier": "Напівпричепи контейнеровози",
+            # Показуємо 4 об'єднані категорії
+            "saddle_tractor": "Сідельні тягачі та напівпричепи",
+            "semi_container_carrier": "Сідельні тягачі та напівпричепи",
+            "van": "Вантажні фургони та рефрижератори",
+            "refrigerator": "Вантажні фургони та рефрижератори",
             "variable_body": "Змінні кузови",
-            "saddle_tractor": "Сідельні тягачі",
-            "trailer": "Причіпи",
-            "refrigerator": "Рефрижератори",
-            "van": "Фургони",
-            "bus": "Буси"
+            "container_carrier": "Контейнеровози (з причепами)",
+            "trailer": "Контейнеровози (з причепами)",
+            "bus": "Сідельні тягачі та напівпричепи"
         },
         "condition": {
             "new": "Новий",
@@ -49,9 +50,14 @@ def reverse_translate_field_value(field_key: str, value: str) -> str:
     """Зворотний переклад значень полів з української на англійську"""
     reverse_translations = {
         "vehicle_type": {
+            # 4 об'єднані категорії -> представницькі значення EN
+            "Сідельні тягачі та напівпричепи": "saddle_tractor",
+            "Вантажні фургони та рефрижератори": "van",
+            "Змінні кузови": "variable_body",
+            "Контейнеровози (з причепами)": "container_carrier",
+            # Зворотна сумісність зі старими підписами
             "Контейнеровози": "container_carrier",
             "Напівпричепи контейнеровози": "semi_container_carrier",
-            "Змінні кузови": "variable_body",
             "Сідельні тягачі": "saddle_tractor",
             "Причіпи": "trailer",
             "Рефрижератори": "refrigerator",

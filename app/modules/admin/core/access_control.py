@@ -64,7 +64,13 @@ class AdminAccessFilter(BaseFilter):
         if is_admin:
             logger.debug(f"Користувач {user.id} ({user.username}) отримав доступ до адмін панелі")
         else:
-            logger.warning(f"Користувач {user.id} ({user.username}) спробував отримати доступ до адмін панелі")
+            # Ігноруємо логування для системних ботів Telegram
+            # GroupAnonymousBot (1087968824) - анонімний адміністратор групи
+            # Channel (136817688) - канальний бот
+            if user.is_bot and user.id in [1087968824, 136817688]:
+                logger.debug(f"Системний бот {user.id} ({user.full_name}) - доступ заборонено")
+            else:
+                logger.warning(f"Користувач {user.id} ({user.username}) спробував отримати доступ до адмін панелі")
         
         return is_admin
 

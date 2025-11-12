@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from app.modules.admin.core.access_control import AdminAccessFilter
 from app.modules.admin.shared.utils.callback_utils import safe_callback_answer
 from app.modules.database.manager import DatabaseManager
+from app.config.settings import settings
 from .keyboards import (
     get_deletion_confirmation_keyboard,
     get_deletion_success_keyboard,
@@ -336,11 +337,11 @@ async def back_to_vehicles_after_deletion(callback: CallbackQuery, state: FSMCon
             current_page = 1
         
         # Отримуємо авто для поточної сторінки
-        offset = (current_page - 1) * 10
-        vehicles = await db_manager.get_vehicles(limit=10, offset=offset, sort_by=sort_by)
+        offset = (current_page - 1) * settings.page_size
+        vehicles = await db_manager.get_vehicles(limit=settings.page_size, offset=offset, sort_by=sort_by)
         
         # Отримуємо статистику
-        from ..stats.statistics import get_vehicles_statistics
+        from ..listing.handlers import get_vehicles_statistics
         stats = await get_vehicles_statistics()
         
         # Форматуємо текст

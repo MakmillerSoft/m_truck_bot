@@ -68,11 +68,16 @@ def _matches_subscription(vehicle, subscription: dict) -> bool:
     logger.info(f"   Авто: type={vehicle.vehicle_type}, brand={vehicle.brand}, year={vehicle.year}, price={vehicle.price}, condition={vehicle.condition}")
     logger.info(f"   Підписка: type={subscription.get('vehicle_type')}, brand={subscription.get('brand')}, year={subscription.get('min_year')}-{subscription.get('max_year')}, price={subscription.get('min_price')}-{subscription.get('max_price')}, condition={subscription.get('condition')}")
     
-    # Мапінг українських назв на англійські
+    # Мапінг українських назв на англійські (оновлено під 4 категорії + зворотна сумісність)
     VEHICLE_TYPE_MAPPING_UA_TO_EN = {
+        # 4 об'єднані категорії
+        "Сідельні тягачі та напівпричепи": "saddle_tractor",
+        "Вантажні фургони та рефрижератори": "van",
+        "Змінні кузови": "variable_body",
+        "Контейнеровози (з причепами)": "container_carrier",
+        # Старі підписи для зворотної сумісності
         "Контейнеровози": "container_carrier",
         "Напівпричепи контейнеровози": "semi_container_carrier",
-        "Змінні кузови": "variable_body",
         "Сідельні тягачі": "saddle_tractor",
         "Причіпи": "trailer",
         "Рефрижератори": "refrigerator",

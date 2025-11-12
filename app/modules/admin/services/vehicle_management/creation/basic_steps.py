@@ -55,19 +55,15 @@ async def process_vehicle_type_selection(callback: CallbackQuery, state: FSMCont
     """Обробка вибору типу авто"""
     await callback.answer()
     vehicle_type_name = callback.data.replace("select_vehicle_type_", "")
-    
-    # Мапимо англійські назви на українські
+
+    # 4 категорії для відображення в картці
     vehicle_type_mapping = {
-        "container_carrier": "Контейнеровози",
-        "semi_container_carrier": "Напівпричепи контейнеровози", 
+        "tractors_and_semi": "Сідельні тягачі та напівпричепи",
+        "vans_and_refrigerators": "Вантажні фургони та рефрижератори",
         "variable_body": "Змінні кузови",
-        "saddle_tractor": "Сідельні тягачі",
-        "trailer": "Причіпи",
-        "refrigerator": "Рефрижератори",
-        "van": "Фургони",
-        "bus": "Буси"
+        "container_carriers": "Контейнеровози (з причепами)",
     }
-    
+
     vehicle_type_ukrainian = vehicle_type_mapping.get(vehicle_type_name, vehicle_type_name)
     await state.update_data(vehicle_type=vehicle_type_ukrainian)
     await state.set_state(VehicleCreationStates.waiting_for_brand)

@@ -35,9 +35,10 @@ def format_admin_vehicle_card(vehicle: VehicleModel) -> Tuple[str, Optional[str]
     if vehicle.condition:
         main_specs.append(f"• <b>Стан:</b> {translate_field_value('condition', vehicle.condition.value)}")
     
-    # Ціна
+    # Ціна з валютою
     if vehicle.price:
-        main_specs.append(f"• <b>Ціна:</b> {vehicle.price:,.0f} $")
+        currency_symbol = vehicle.currency if vehicle.currency else "USD"
+        main_specs.append(f"• <b>Ціна:</b> {vehicle.price:,.0f} {currency_symbol}")
     
     # Пробіг
     if vehicle.mileage:
@@ -113,11 +114,9 @@ def format_admin_vehicle_card(vehicle: VehicleModel) -> Tuple[str, Optional[str]
     if vehicle.vin_code:
         additional_info.append(f"• <b>VIN:</b> {vehicle.vin_code}")
     
-    # Опис
+    # Опис (повний, без обмежень для адмінів)
     if vehicle.description:
-        # Обмежуємо довжину опису
-        description = vehicle.description[:200] + "..." if len(vehicle.description) > 200 else vehicle.description
-        additional_info.append(f"• <b>Опис:</b> {description}")
+        additional_info.append(f"• <b>Опис:</b> {vehicle.description}")
     
     # Додаємо додаткову інформацію
     if additional_info:
@@ -131,6 +130,13 @@ def format_admin_vehicle_card(vehicle: VehicleModel) -> Tuple[str, Optional[str]
     status_text = translate_field_value('status', vehicle.status.value) if vehicle.status else "Наявне"
     system_info.append(f"• <b>Статус:</b> {status_text}")
     
+    # Активність оголошення
+    is_active_text = "Активне" if vehicle.is_active else "Неактивне"
+    system_info.append(f"• <b>Активність:</b> {is_active_text}")
+    
+    # ID продавця
+    system_info.append(f"• <b>ID продавця:</b> {vehicle.seller_id}")
+    
     # Фото
     photo_count = len(vehicle.photos) if vehicle.photos else 0
     system_info.append(f"• <b>Фото:</b> {photo_count} шт.")
@@ -141,6 +147,14 @@ def format_admin_vehicle_card(vehicle: VehicleModel) -> Tuple[str, Optional[str]
     # Дата створення
     if vehicle.created_at:
         system_info.append(f"• <b>Створено:</b> {vehicle.created_at.strftime('%d.%m.%Y %H:%M')}")
+    
+    # Дата останнього оновлення
+    if vehicle.updated_at:
+        system_info.append(f"• <b>Оновлено:</b> {vehicle.updated_at.strftime('%d.%m.%Y %H:%M')}")
+    
+    # Дата публікації
+    if vehicle.published_at:
+        system_info.append(f"• <b>Опубліковано:</b> {vehicle.published_at.strftime('%d.%m.%Y %H:%M')}")
     
     # Дата зміни статусу
     if vehicle.status_changed_at:
@@ -171,6 +185,10 @@ def format_admin_vehicle_card(vehicle: VehicleModel) -> Tuple[str, Optional[str]
             system_info.append(f"• <b>Посилання в групу:</b> Повідомлення #{vehicle.group_message_id}")
     elif not vehicle.published_in_group:
         system_info.append("• <b>Посилання в групу:</b> Авто не опубліковане в групу")
+    
+    # ID повідомлення в боті
+    if vehicle.bot_message_id:
+        system_info.append(f"• <b>ID повідомлення в боті:</b> {vehicle.bot_message_id}")
     
     # Додаємо системну інформацію
     if system_info:

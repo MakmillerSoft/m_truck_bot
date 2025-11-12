@@ -31,8 +31,13 @@ class Settings(BaseSettings):
         default="M-Truck Company", json_schema_extra={"env": "COMPANY_NAME"}
     )
     contact_phone: str = Field(
-        default="+380 66 372 69 41", json_schema_extra={"env": "CONTACT_PHONE"}
+        default="+380502311339", json_schema_extra={"env": "CONTACT_PHONE"}
     )
+    
+    # Pagination Configuration
+    page_size: int = Field(
+        default=10, json_schema_extra={"env": "PAGE_SIZE"}
+    )  # Кількість елементів на сторінці в усіх розділах
 
     # FSM Storage Configuration
     fsm_storage_type: str = Field(
@@ -50,31 +55,19 @@ class Settings(BaseSettings):
         default=False, json_schema_extra={"env": "GROUP_ENABLED"}
     )  # Чи увімкнена публікація в групу
     
-    # Group Topics Configuration - з .env файлу
-    topic_saddle_tractors: int = Field(
-        default=0, json_schema_extra={"env": "TOPIC_SADDLE_TRACTORS"}
-    )
-    topic_buses: int = Field(
-        default=0, json_schema_extra={"env": "TOPIC_BUSES"}
-    )
-    topic_vans: int = Field(
-        default=0, json_schema_extra={"env": "TOPIC_VANS"}
-    )
+    # Group Topics Configuration - 4 категорії для публікації авто
+    topic_tractors_and_semi: int = Field(
+        default=18, json_schema_extra={"env": "TOPIC_TRACTORS_AND_SEMI"}
+    )  # Сідельні тягачі та напівпричепи
+    topic_vans_and_refrigerators: int = Field(
+        default=14, json_schema_extra={"env": "TOPIC_VANS_AND_REFRIGERATORS"}
+    )  # Вантажні фургони та рефрижератори
     topic_variable_body: int = Field(
-        default=0, json_schema_extra={"env": "TOPIC_VARIABLE_BODY"}
-    )
-    topic_trailers: int = Field(
-        default=0, json_schema_extra={"env": "TOPIC_TRAILERS"}
-    )
-    topic_refrigerators: int = Field(
-        default=0, json_schema_extra={"env": "TOPIC_REFRIGERATORS"}
-    )
-    topic_semi_container_carriers: int = Field(
-        default=0, json_schema_extra={"env": "TOPIC_SEMI_CONTAINER_CARRIERS"}
-    )
+        default=12, json_schema_extra={"env": "TOPIC_VARIABLE_BODY"}
+    )  # Змінні кузови
     topic_container_carriers: int = Field(
-        default=0, json_schema_extra={"env": "TOPIC_CONTAINER_CARRIERS"}
-    )
+        default=4, json_schema_extra={"env": "TOPIC_CONTAINER_CARRIERS"}
+    )  # Контейнеровози (з причепами)
 
     model_config = ConfigDict(
         env_file=".env",
@@ -89,18 +82,34 @@ class Settings(BaseSettings):
         return [int(x.strip()) for x in self.admin_ids.split(",") if x.strip()]
     
     def get_topic_id_for_vehicle_type(self, vehicle_type: str) -> int:
-        """Отримати ID топіку для типу авто"""
+        """Отримати ID топіку для типу авто
+        
+        Мапінг 8 типів авто на 4 топіки групи:
+        - Сідельні тягачі та напівпричепи → TOPIC_TRACTORS_AND_SEMI
+        - Вантажні фургони та рефрижератори → TOPIC_VANS_AND_REFRIGERATORS
+        - Змінні кузови → TOPIC_VARIABLE_BODY
+        - Контейнеровози (з причепами) → TOPIC_CONTAINER_CARRIERS
+        """
         topic_mapping = {
-            'saddle_tractor': self.topic_saddle_tractors,
-            'bus': self.topic_buses,
-            'van': self.topic_vans,
+            # Сідельні тягачі та напівпричепи (thread_id: 18)
+            'saddle_tractor': self.topic_tractors_and_semi,
+            'semi_container_carrier': self.topic_tractors_and_semi,
+            
+            # Вантажні фургони та рефрижератори (thread_id: 14)
+            'van': self.topic_vans_and_refrigerators,
+            'refrigerator': self.topic_vans_and_refrigerators,
+            
+            # Змінні кузови (thread_id: 12)
             'variable_body': self.topic_variable_body,
-            'trailer': self.topic_trailers,
-            'refrigerator': self.topic_refrigerators,
-            'semi_container_carrier': self.topic_semi_container_carriers,
+            
+            # Контейнеровози (з причепами) (thread_id: 4)
             'container_carrier': self.topic_container_carriers,
+            'trailer': self.topic_container_carriers,
+            
+            # Буси (не використовується, але для зворотної сумісності)
+            'bus': self.topic_tractors_and_semi,  # або можна залишити 0
         }
-        return topic_mapping.get(vehicle_type, 0)
+        return topic_mapping.get(vehicle_type, self.topic_tractors_and_semi)
 
 
 # Глобальний екземпляр налаштувань

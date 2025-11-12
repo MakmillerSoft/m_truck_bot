@@ -507,9 +507,28 @@ async def publish_to_group_only(callback: CallbackQuery, state: FSMContext):
         # Отримуємо дані
         data = await state.get_data()
         
+        # Спочатку зберігаємо авто в БД, щоб отримати vehicle_id для картки
+        from app.modules.database.manager import DatabaseManager
+        from ..publication.bot_publisher import BotPublisher
+        
+        db_manager = DatabaseManager()
+        bot_publisher = BotPublisher(callback.bot, db_manager)
+        save_data = dict(data)
+        save_data['main_photo'] = data.get('main_photo')
+        save_data['photos'] = data.get('group_photos', [])
+        vehicle_model = bot_publisher._prepare_vehicle_model(save_data, callback.from_user.id)
+        
+        # Зберігаємо в БД перед публікацією
+        vehicle_id = await db_manager.create_vehicle(vehicle_model)
+        
+        if not vehicle_id:
+            await callback.answer("❌ Помилка збереження авто в БД", show_alert=True)
+            return
+        
         # Підставляємо photos з group_photos (для групи вони і використовуються)
         prepared_data = dict(data)
         prepared_data['photos'] = data.get('group_photos', [])
+        prepared_data['vehicle_id'] = vehicle_id  # Додаємо ID для картки
         
         # Створюємо публікатор
         group_publisher = await create_group_publisher(callback.bot)
@@ -518,43 +537,26 @@ async def publish_to_group_only(callback: CallbackQuery, state: FSMContext):
         success, message, group_message_id = await group_publisher.publish_vehicle_to_group(prepared_data)
         
         if success:
-            # Зберігаємо авто в БД з інформацією про публікацію в групу
-            from app.modules.database.manager import DatabaseManager
+            # Оновлюємо авто в БД з інформацією про публікацію в групу
+            await db_manager.update_vehicle(vehicle_id, {
+                'published_in_group': True,
+                'group_message_id': group_message_id
+            })
             
-            # Підготовка даних для БД
-            from ..publication.bot_publisher import BotPublisher
-            db_manager = DatabaseManager()
-            bot_publisher = BotPublisher(callback.bot, db_manager)
-            # Для збереження: окремо main_photo та photos для групи
-            save_data = dict(data)
-            save_data['main_photo'] = data.get('main_photo')
-            save_data['photos'] = data.get('group_photos', [])
-            vehicle_model = bot_publisher._prepare_vehicle_model(save_data, callback.from_user.id)
+            result_text = f"✅ <b>АВТО УСПІШНО ОПУБЛІКОВАНО В ГРУПУ</b>\n\n{message}\n\n📋 ID авто: {vehicle_id}"
             
-            # Встановлюємо дані про публікацію в групу
-            vehicle_model.published_in_group = True
-            vehicle_model.group_message_id = group_message_id
+            # Перевіряємо підписки та надсилаємо сповіщення
+            try:
+                from app.modules.client.services.vehicle_search.subscriptions.notifications import check_and_notify_subscriptions
+                await check_and_notify_subscriptions(callback.bot, vehicle_id)
+            except Exception as e:
+                logger.error(f"❌ Помилка перевірки підписок: {e}")
             
-            # Зберігаємо в БД
-            vehicle_id = await db_manager.create_vehicle(vehicle_model)
+            # Очищуємо FSM стан
+            await state.clear()
             
-            if vehicle_id:
-                result_text = f"✅ <b>АВТО УСПІШНО ОПУБЛІКОВАНО В ГРУПУ</b>\n\n{message}\n\n📋 ID авто: {vehicle_id}"
-                
-                # Перевіряємо підписки та надсилаємо сповіщення
-                try:
-                    from app.modules.client.services.vehicle_search.subscriptions.notifications import check_and_notify_subscriptions
-                    await check_and_notify_subscriptions(callback.bot, vehicle_id)
-                except Exception as e:
-                    logger.error(f"❌ Помилка перевірки підписок: {e}")
-                
-                # Очищуємо FSM стан
-                await state.clear()
-                
-                # Перенаправляємо до Управління авто
-                await redirect_to_vehicle_management(callback)
-            else:
-                result_text = f"⚠️ <b>ЧАСТКОВО УСПІШНО</b>\n\n✅ Група: {message}\n❌ БД: Не вдалося зберегти авто в базу даних"
+            # Перенаправляємо до Управління авто
+            await redirect_to_vehicle_management(callback)
         else:
             result_text = f"❌ <b>ПОМИЛКА ПУБЛІКАЦІЇ В ГРУПУ</b>\n\n{message}"
         
@@ -613,9 +615,11 @@ async def publish_to_both(callback: CallbackQuery, state: FSMContext):
             data_for_bot, callback.from_user.id
         )
         
-        # Публікуємо в групу
+        # Публікуємо в групу (з vehicle_id після збереження в бот)
         data_for_group = dict(data)
         data_for_group['photos'] = data.get('group_photos', [])
+        if vehicle_id:
+            data_for_group['vehicle_id'] = vehicle_id
         group_success, group_message, group_message_id = await group_publisher.publish_vehicle_to_group(data_for_group)
         
         # Формуємо результат

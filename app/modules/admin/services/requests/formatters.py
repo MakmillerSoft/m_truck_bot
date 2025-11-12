@@ -67,13 +67,24 @@ def format_request_detail(r: Dict) -> str:
     else:
         vehicle_line = "—"
 
+    # Додаємо інформацію про обробку адміністратором
+    processed_info = ""
+    if r.get("processed_by_admin_id") and r.get("processed_at"):
+        from datetime import datetime
+        try:
+            processed_dt = datetime.fromisoformat(r["processed_at"])
+            processed_date = processed_dt.strftime("%d.%m.%Y %H:%M")
+            processed_info = f"\n👤 Обробив: Адмін ID {r['processed_by_admin_id']}\n⏰ Час: {processed_date}"
+        except Exception:
+            processed_info = f"\n👤 Обробив: Адмін ID {r['processed_by_admin_id']}"
+
     text = (
         "📨 <b>Заявка</b>\n\n"
         f"ID: <b>{r['id']}</b>\n"
         f"Статус: <b>{status_text}</b>\n"
         f"Тип: <b>{type_text}</b>\n"
         f"Користувач: <b>{user}</b> (📞 {r.get('phone') or '—'})\n"
-        f"Авто: {vehicle_line}\n\n"
+        f"Авто: {vehicle_line}{processed_info}\n\n"
         f"Деталі:\n{r.get('details') or '—'}"
     )
 

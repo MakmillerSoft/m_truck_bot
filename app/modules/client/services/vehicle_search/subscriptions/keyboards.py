@@ -18,14 +18,10 @@ def get_subscriptions_main_keyboard() -> InlineKeyboardMarkup:
 def get_vehicle_type_keyboard() -> InlineKeyboardMarkup:
     """Клавіатура вибору типу авто"""
     keyboard = [
-        [InlineKeyboardButton(text="🚛 Контейнеровози", callback_data="sub_type_container_carrier")],
-        [InlineKeyboardButton(text="🚚 Напівпричепи контейнеровози", callback_data="sub_type_semi_container_carrier")],
-        [InlineKeyboardButton(text="❄️ Рефрижератори", callback_data="sub_type_refrigerator")],
-        [InlineKeyboardButton(text="🔄 Змінні кузови", callback_data="sub_type_variable_body")],
-        [InlineKeyboardButton(text="🚜 Сідельні тягачі", callback_data="sub_type_saddle_tractor")],
-        [InlineKeyboardButton(text="🚐 Фургони", callback_data="sub_type_van")],
-        [InlineKeyboardButton(text="🚌 Буси", callback_data="sub_type_bus")],
-        [InlineKeyboardButton(text="⚙️ Причіпи", callback_data="sub_type_trailer")],
+        [InlineKeyboardButton(text="🚍 Вантажні фургони та рефрижератори", callback_data="sub_type_vans_and_refrigerators")],
+        [InlineKeyboardButton(text="🚚 Контейнеровози (з причепами)", callback_data="sub_type_container_carriers")],
+        [InlineKeyboardButton(text="🚛 Сідельні тягачі та напівпричепи", callback_data="sub_type_tractors_and_semi")],
+        [InlineKeyboardButton(text="🚞 Змінні кузови", callback_data="sub_type_variable_body")],
         [InlineKeyboardButton(text="➡️ Пропустити", callback_data="sub_skip_type")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="sub_back_to_name")],
     ]

@@ -1,7 +1,7 @@
 """
 Клавіатури для редагування авто
 """
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from typing import Dict, Any, Optional
 from ..shared.translations import translate_field_value
 
@@ -123,6 +123,31 @@ def get_editing_menu_keyboard(vehicle_data: Dict[str, Any], changes: Optional[Di
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
+def get_vehicle_type_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Клавіатура для вибору типу авто (4 категорії) під час редагування.
+    Використовуємо ReplyKeyboard щоб надсилати текстове значення напряму.
+    """
+    rows = [
+        [KeyboardButton(text="Вантажні фургони та рефрижератори")],
+        [KeyboardButton(text="Контейнеровози (з причепами)")],
+        [KeyboardButton(text="Сідельні тягачі та напівпричепи")],
+        [KeyboardButton(text="Змінні кузови")],
+    ]
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, one_time_keyboard=True)
+
+
+def get_vehicle_type_inline_keyboard() -> InlineKeyboardMarkup:
+    """Інлайн-клавіатура для вибору типу авто (4 категорії) при редагуванні."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🚍 Вантажні фургони та рефрижератори", callback_data="edit_type_vans_and_refrigerators")],
+            [InlineKeyboardButton(text="🚚 Контейнеровози (з причепами)", callback_data="edit_type_container_carriers")],
+            [InlineKeyboardButton(text="🚛 Сідельні тягачі та напівпричепи", callback_data="edit_type_tractors_and_semi")],
+            [InlineKeyboardButton(text="🚞 Змінні кузови", callback_data="edit_type_variable_body")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_editing_menu")],
+        ]
+    )
 
 def get_field_editing_keyboard(field_name: str, current_value: str) -> InlineKeyboardMarkup:
     """Клавіатура для редагування конкретного поля"""

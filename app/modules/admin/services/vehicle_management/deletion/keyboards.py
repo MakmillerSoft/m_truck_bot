@@ -71,12 +71,6 @@ def get_deletion_cancelled_keyboard(vehicle_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📊 Статистика авто",
-                callback_data=f"vehicle_stats_{vehicle_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
                 text="🔙 Назад",
                 callback_data="back_to_vehicles_list"
             ),

@@ -5,7 +5,7 @@
 import logging
 import json
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
 from app.modules.database.manager import db_manager
@@ -56,21 +56,95 @@ async def show_saved_vehicles(callback: CallbackQuery, state: FSMContext):
     if not saved_vehicles_dicts:
         await callback.message.edit_text(
             "📋 <b>Мої збережені</b>\n\n"
-            "У вас поки немає збережених автомобілів.\n"
-            "Збережіть авто з каталогу, щоб переглядати їх тут!",
+            "У вас поки немає збережених автомобілів.\n\n"
+            "📖 <b>Як зберегти авто:</b>\n"
+            "• Перейдіть до <b>Каталогу авто</b>\n"
+            "• Знайдіть потрібне авто\n"
+            "• Натисніть <b>\"❤️ Зберегти\"</b> на картці авто\n"
+            "• Збережені авто з'являться тут\n\n"
+            "💡 <b>Навіщо зберігати:</b>\n"
+            "• Швидкий доступ до обраних авто\n"
+            "• Зручний перегляд та порівняння\n"
+            "• Можливість залишити заявку прямо з картки",
             reply_markup=get_empty_saved_keyboard(),
             parse_mode=get_default_parse_mode(),
         )
         return
     
-    # Зберігаємо список ID у FSM для навігації
+    # Якщо є авто, показуємо меню з інструкцією та кнопкою перегляду
+    text = (
+        "📋 <b>Мої збережені</b>\n\n"
+        f"У вас збережено авто: <b>{len(saved_vehicles_dicts)}</b>\n\n"
+        "📖 <b>Як користуватися:</b>\n"
+        "• Гортайте збережені авто стрілками ⬅️ ➡️\n"
+        "• Видалити з обраного: натисніть <b>\"❌ Видалити з обраного\"</b>\n"
+        "• Залишити заявку: натисніть <b>\"📝 Залишити заявку\"</b>\n"
+        "• Переглянути деталі авто в каталозі групи\n\n"
+        "<i>Натисніть нижче, щоб переглянути ваші збережені авто:</i>"
+    )
+    
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="👀 Переглянути збережені", callback_data="show_saved_vehicles_list")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="client_back_to_main")]
+        ]
+    )
+    
+    # Зберігаємо дані в стані для майбутнього використання
     await state.update_data(
         saved_vehicles=[v['id'] for v in saved_vehicles_dicts],
-        current_saved_index=0
+        current_saved_index=0,
+        saved_vehicles_dicts=saved_vehicles_dicts
     )
+    
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode=get_default_parse_mode(),
+        )
+    except Exception:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.message.answer(
+            text,
+            reply_markup=keyboard,
+            parse_mode=get_default_parse_mode(),
+        )
+
+
+@saved_vehicles_router.callback_query(F.data == "show_saved_vehicles_list")
+async def show_saved_vehicles_list(callback: CallbackQuery, state: FSMContext):
+    """Показати список збережених авто (перша картка)"""
+    await callback.answer()
+    
+    # Отримуємо дані зі стану
+    data = await state.get_data()
+    saved_vehicles_dicts = data.get('saved_vehicles_dicts', [])
+    
+    if not saved_vehicles_dicts:
+        await callback.message.edit_text(
+            "❌ <b>Помилка!</b> Не знайдено збережених авто.\n\n"
+            "Поверніться до головного меню.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Назад", callback_data="client_back_to_main")]
+                ]
+            ),
+            parse_mode=get_default_parse_mode(),
+        )
+        return
     
     # Конвертуємо перший словник в VehicleModel з обробкою JSON полів
     first_vehicle = _process_vehicle_dict(saved_vehicles_dicts[0])
+    
+    # Оновлюємо стан
+    await state.update_data(
+        current_saved_index=0
+    )
     
     # Показуємо першу картку
     await render_saved_vehicle_card(callback.message, first_vehicle, 0, len(saved_vehicles_dicts), state)

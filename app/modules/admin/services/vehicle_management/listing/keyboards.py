@@ -201,36 +201,6 @@ def get_vehicle_delete_confirmation_keyboard(vehicle_id: int) -> InlineKeyboardM
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_vehicle_stats_keyboard(vehicle_id: int) -> InlineKeyboardMarkup:
-    """Клавіатура для статистики авто"""
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text="📈 Перегляди",
-                callback_data=f"vehicle_views_{vehicle_id}"
-            ),
-            InlineKeyboardButton(
-                text="💾 Збереження",
-                callback_data=f"vehicle_saves_{vehicle_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="📅 Історія",
-                callback_data=f"vehicle_history_{vehicle_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🔙 Назад",
-                callback_data=f"view_vehicle_{vehicle_id}"
-            ),
-        ],
-    ]
-    
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
 def get_empty_vehicles_keyboard() -> InlineKeyboardMarkup:
     """Клавіатура коли немає авто"""
     buttons = [

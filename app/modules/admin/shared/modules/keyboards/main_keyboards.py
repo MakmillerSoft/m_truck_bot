@@ -19,22 +19,18 @@ def get_admin_main_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="📊 Статистика", 
-                callback_data="admin_stats"
-            ),
-            InlineKeyboardButton(
                 text="📢 Розсилка", 
                 callback_data="admin_broadcast"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="⚙️ Налаштування", 
-                callback_data="admin_settings"
             ),
             InlineKeyboardButton(
                 text="📨 Заявки", 
                 callback_data="admin_requests"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="📤 Експорт даних", 
+                callback_data="admin_export"
             ),
         ],
         [
@@ -64,10 +60,6 @@ def get_admin_vehicles_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text="🔍 Швидкий пошук", 
                 callback_data="admin_quick_search"
-            ),
-            InlineKeyboardButton(
-                text="📝 Чернетки", 
-                callback_data="admin_drafts"
             ),
         ],
         [
@@ -103,39 +95,6 @@ def get_admin_users_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def get_admin_stats_keyboard() -> InlineKeyboardMarkup:
-    """Клавіатура статистики"""
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                text="📊 Загальна статистика", 
-                callback_data="admin_general_stats"
-            ),
-            InlineKeyboardButton(
-                text="🚛 Статистика авто", 
-                callback_data="admin_vehicle_stats"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="👥 Статистика користувачів", 
-                callback_data="admin_user_stats"
-            ),
-            InlineKeyboardButton(
-                text="📈 Аналітика", 
-                callback_data="admin_analytics"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🔙 Назад", 
-                callback_data="admin_main"
-            ),
-        ],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
-
-
 def get_admin_broadcast_keyboard() -> InlineKeyboardMarkup:
     """Клавіатура розсилки"""
     keyboard = [
@@ -153,76 +112,6 @@ def get_admin_broadcast_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text="🧵 Управління топіками", 
                 callback_data="admin_topics"
-            ),
-            InlineKeyboardButton(
-                text="📊 Статистика розсилок", 
-                callback_data="admin_broadcast_stats"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🔙 Назад", 
-                callback_data="admin_main"
-            ),
-        ],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
-
-
-def get_admin_settings_keyboard() -> InlineKeyboardMarkup:
-    """Клавіатура налаштувань"""
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                text="⚙️ Загальні налаштування", 
-                callback_data="admin_general_settings"
-            ),
-            InlineKeyboardButton(
-                text="🔒 Безпека", 
-                callback_data="admin_security_settings"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🤖 Налаштування бота", 
-                callback_data="admin_bot_settings"
-            ),
-            InlineKeyboardButton(
-                text="📢 Налаштування групи", 
-                callback_data="admin_group_settings"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🔙 Назад", 
-                callback_data="admin_main"
-            ),
-        ],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
-
-
-def get_admin_reports_keyboard() -> InlineKeyboardMarkup:
-    """Клавіатура звітів"""
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                text="📊 Щоденний звіт", 
-                callback_data="admin_daily_report"
-            ),
-            InlineKeyboardButton(
-                text="📈 Тижневий звіт", 
-                callback_data="admin_weekly_report"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="📅 Місячний звіт", 
-                callback_data="admin_monthly_report"
-            ),
-            InlineKeyboardButton(
-                text="📋 Кастомний звіт", 
-                callback_data="admin_custom_report"
             ),
         ],
         [

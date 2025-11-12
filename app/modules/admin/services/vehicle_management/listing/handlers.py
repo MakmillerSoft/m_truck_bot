@@ -8,8 +8,8 @@ from aiogram.fsm.context import FSMContext
 
 from app.modules.admin.core.access_control import AdminAccessFilter
 from app.modules.database.manager import DatabaseManager
+from app.config.settings import settings
 from .keyboards import get_vehicles_list_keyboard, get_vehicle_detail_keyboard
-from ..stats.statistics import get_vehicles_statistics
 from .formatters import format_admin_vehicle_card, format_vehicle_list_item
 from ..editing.handlers import show_editing_menu
 from ..editing.states import VehicleEditingStates
@@ -25,6 +25,42 @@ router.message.filter(AdminAccessFilter())
 db_manager = DatabaseManager()
 
 
+async def get_vehicles_statistics():
+    """Отримати базову статистику авто"""
+    try:
+        # Отримуємо всі авто для підрахунку
+        vehicles = await db_manager.get_vehicles(limit=1000, offset=0)
+        
+        # Рахуємо марки
+        brands = set()
+        brand_counts = {}
+        for vehicle in vehicles:
+            if vehicle.brand:
+                brands.add(vehicle.brand)
+                brand_counts[vehicle.brand] = brand_counts.get(vehicle.brand, 0) + 1
+        
+        # Сортуємо марки за кількістю
+        top_brands = sorted(brand_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        # Рахуємо кількість сторінок
+        total_pages = (len(vehicles) + 9) // 10  # Округлення вгору
+        
+        return {
+            'total_vehicles': len(vehicles),
+            'total_brands': len(brands),
+            'top_brands': top_brands,
+            'total_pages': total_pages
+        }
+    except Exception as e:
+        logger.error(f"Помилка отримання статистики: {e}")
+        return {
+            'total_vehicles': 0,
+            'total_brands': 0,
+            'top_brands': [],
+            'total_pages': 1
+        }
+
+
 @router.callback_query(F.data == "admin_all_vehicles")
 async def show_all_vehicles(callback: CallbackQuery, state: FSMContext):
     """Показати всі авто зі статистикою та пагінацією"""
@@ -34,8 +70,8 @@ async def show_all_vehicles(callback: CallbackQuery, state: FSMContext):
         # Отримуємо статистику
         stats = await get_vehicles_statistics()
         
-        # Отримуємо першу сторінку авто (10 штук) з сортуванням за датою (від наймолодших)
-        vehicles = await db_manager.get_vehicles(limit=10, offset=0, sort_by="created_at_desc")
+        # Отримуємо першу сторінку авто з сортуванням за датою (від наймолодших)
+        vehicles = await db_manager.get_vehicles(limit=settings.page_size, offset=0, sort_by="created_at_desc")
         
         # Форматуємо текст зі статистикою
         stats_text = f"""📋 <b>Всі авто</b>
@@ -96,8 +132,8 @@ async def navigate_vehicles_page(callback: CallbackQuery, state: FSMContext):
             return
         
         # Отримуємо авто для поточної сторінки
-        offset = (page - 1) * 10
-        vehicles = await db_manager.get_vehicles(limit=10, offset=offset, sort_by=sort_by)
+        offset = (page - 1) * settings.page_size
+        vehicles = await db_manager.get_vehicles(limit=settings.page_size, offset=offset, sort_by=sort_by)
         
         # Отримуємо статистику для заголовка
         stats = await get_vehicles_statistics()
@@ -240,8 +276,8 @@ async def back_to_vehicles_list(callback: CallbackQuery, state: FSMContext):
             current_page = 1
         
         # Отримуємо авто для поточної сторінки
-        offset = (current_page - 1) * 10
-        vehicles = await db_manager.get_vehicles(limit=10, offset=offset, sort_by=sort_by)
+        offset = (current_page - 1) * settings.page_size
+        vehicles = await db_manager.get_vehicles(limit=settings.page_size, offset=offset, sort_by=sort_by)
         
         # Отримуємо статистику
         stats = await get_vehicles_statistics()
@@ -397,8 +433,8 @@ async def sort_vehicles(callback: CallbackQuery, state: FSMContext):
         # Отримуємо авто з урахуванням статус фільтра та сортування
         if status_filter == "all":
             vehicles = await db_manager.get_vehicles(
-                limit=10, 
-                offset=(current_page - 1) * 10, 
+                limit=settings.page_size, 
+                offset=(current_page - 1) * settings.page_size, 
                 sort_by=sort_type
             )
             stats = await get_vehicles_statistics()
@@ -407,12 +443,12 @@ async def sort_vehicles(callback: CallbackQuery, state: FSMContext):
             vehicles = await db_manager.get_vehicles_by_status(
                 status=status_filter,
                 page=current_page, 
-                per_page=10, 
+                per_page=settings.page_size, 
                 sort_by=sort_type
             )
             total_count = await db_manager.get_vehicles_count_by_status(status_filter)
         
-        total_pages = (total_count + 9) // 10
+        total_pages = (total_count + settings.page_size - 1) // settings.page_size
         
         # Форматуємо текст з урахуванням статус фільтра
         from ..shared.translations import translate_field_value
@@ -774,8 +810,8 @@ async def filter_vehicles_by_status(callback: CallbackQuery, state: FSMContext):
         # Отримуємо авто з фільтрацією за статусом
         if status_filter == "all":
             vehicles = await db_manager.get_vehicles(
-                limit=10, 
-                offset=(current_page - 1) * 10, 
+                limit=settings.page_size, 
+                offset=(current_page - 1) * settings.page_size, 
                 sort_by=sort_by
             )
             # Отримуємо статистику для загальної кількості
@@ -785,12 +821,12 @@ async def filter_vehicles_by_status(callback: CallbackQuery, state: FSMContext):
             vehicles = await db_manager.get_vehicles_by_status(
                 status=status_filter,
                 page=current_page, 
-                per_page=10, 
+                per_page=settings.page_size, 
                 sort_by=sort_by
             )
             total_count = await db_manager.get_vehicles_count_by_status(status_filter)
         
-        total_pages = (total_count + 9) // 10  # Округлення вгору
+        total_pages = (total_count + settings.page_size - 1) // settings.page_size  # Округлення вгору
         
         # Форматуємо текст з урахуванням статус фільтра та сортування
         from ..shared.translations import translate_field_value

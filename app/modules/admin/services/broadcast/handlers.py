@@ -21,9 +21,52 @@ router.callback_query.filter(AdminAccessFilter())
 
 import asyncio
 from typing import Dict, List
+from datetime import datetime, timedelta
 
-# Тимчасове сховище для медіагруп розсилки
+# Тимчасове сховище для медіагруп розсилки з timestamp для автоочищення
 _broadcast_media_groups: Dict[str, Dict] = {}
+_cleanup_task = None  # Задача для періодичного очищення
+
+
+def _clean_file_id(file_id: str) -> str:
+    """Видаляє префікс video: з file_id якщо він є"""
+    if file_id and isinstance(file_id, str) and file_id.startswith("video:"):
+        return file_id.replace("video:", "", 1)
+    return file_id
+
+
+async def _cleanup_old_media_groups():
+    """Періодичне очищення старих медіагруп (старше 1 години)"""
+    while True:
+        try:
+            await asyncio.sleep(1800)  # Перевірка кожні 30 хвилин
+            current_time = datetime.now()
+            expired_groups = []
+            
+            for group_id, entry in _broadcast_media_groups.items():
+                created_at = entry.get('created_at')
+                if created_at and (current_time - created_at) > timedelta(hours=1):
+                    expired_groups.append(group_id)
+            
+            # Видаляємо застарілі групи
+            for group_id in expired_groups:
+                del _broadcast_media_groups[group_id]
+                logger.warning(f"🧹 Видалено застарілу медіагрупу: {group_id}")
+            
+            if expired_groups:
+                logger.info(f"🧹 Очищено {len(expired_groups)} застарілих медіагруп")
+                
+        except Exception as e:
+            logger.error(f"❌ Помилка очищення медіагруп: {e}")
+            await asyncio.sleep(60)  # При помилці чекаємо 1 хвилину
+
+
+def _start_cleanup_task():
+    """Запуск задачі автоочищення"""
+    global _cleanup_task
+    if _cleanup_task is None or _cleanup_task.done():
+        _cleanup_task = asyncio.create_task(_cleanup_old_media_groups())
+        logger.info("✅ Запущено задачу автоочищення медіагруп")
 
 
 async def _safe_edit_text(callback: CallbackQuery, text: str, reply_markup: InlineKeyboardMarkup | None = None) -> None:
@@ -44,30 +87,65 @@ class BroadcastStates(StatesGroup):
     confirm_send = State()
     waiting_for_topic = State()
     # Налаштування: додавання топіка (послідовно: назва → thread_id)
-    settings_waiting_topic_name = State()
+    settings_waiting_topic_name = State()  # Для додавання нового топіка
     settings_waiting_topic_id = State()
+    # Налаштування: редагування топіка
+    settings_waiting_rename_topic_name = State()  # Для редагування назви існуючого топіка
 
 
-# Кеш топіків групи (оновлюємо по запиту)
+# Кеш топіків групи з автоматичним оновленням
 TOPICS = {}
+_TOPICS_CACHE_TIMESTAMP = None
+_TOPICS_CACHE_TTL = 300  # TTL 5 хвилин (300 секунд)
 
 
-async def load_group_topics(bot) -> dict:
-    """Спроба підвантажити гілки (forum topics) з групи.
-    Якщо немає програмного способу — повертаємо попередньо відомі з налаштувань.
+async def load_group_topics(bot, force_refresh: bool = False) -> dict:
+    """Завантажити гілки (forum topics) з групи з автоматичним кешуванням.
+    
+    Args:
+        bot: Екземпляр бота (для майбутнього розширення)
+        force_refresh: Примусово оновити кеш, ігноруючи TTL
+    
+    Returns:
+        dict: Мапа назва_топіка → thread_id
     """
-    # Повертаємо мапу ім'я → thread_id з БД
-    topics: dict[str, int] = {}
-    rows = await db_manager.get_group_topics()
-    for row in rows:
-        topics[row.name] = row.thread_id
-    return topics
+    global TOPICS, _TOPICS_CACHE_TIMESTAMP
+    
+    current_time = datetime.now()
+    
+    # Перевіряємо чи потрібно оновити кеш
+    should_refresh = (
+        force_refresh or 
+        _TOPICS_CACHE_TIMESTAMP is None or 
+        (current_time - _TOPICS_CACHE_TIMESTAMP).total_seconds() > _TOPICS_CACHE_TTL
+    )
+    
+    if should_refresh:
+        # Завантажуємо топіки з БД
+        topics: dict[str, int] = {}
+        rows = await db_manager.get_group_topics()
+        for row in rows:
+            topics[row.name] = row.thread_id
+        
+        TOPICS = topics
+        _TOPICS_CACHE_TIMESTAMP = current_time
+        
+        if force_refresh:
+            logger.info(f"🔄 Кеш топіків примусово оновлено: {len(TOPICS)} топіків")
+        else:
+            logger.info(f"🔄 Кеш топіків автоматично оновлено: {len(TOPICS)} топіків (TTL: {_TOPICS_CACHE_TTL}с)")
+    
+    return TOPICS
 
 
 @router.callback_query(F.data == "admin_broadcast")
 async def broadcast_main_menu(callback: CallbackQuery, state: FSMContext):
     """Головне меню розсилки"""
     logger.info(f"🔔 Обробник broadcast_main_menu викликаний для користувача {callback.from_user.id}")
+    
+    # Запускаємо задачу автоочищення при першому виклику
+    _start_cleanup_task()
+    
     await callback.answer()
     from app.modules.admin.shared.modules.keyboards.main_keyboards import get_admin_broadcast_keyboard
     await callback.message.edit_text(
@@ -81,26 +159,55 @@ async def broadcast_main_menu(callback: CallbackQuery, state: FSMContext):
 async def broadcast_history(callback: CallbackQuery, state: FSMContext):
     """Історія розсилок"""
     await callback.answer()
-    await callback.message.edit_text(
-        "📋 <b>Історія розсилок</b>\n\nФункція в розробці...",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_broadcast")]
-        ]),
-        parse_mode=get_default_parse_mode(),
-    )
-
-
-@router.callback_query(F.data == "admin_broadcast_stats")
-async def broadcast_stats(callback: CallbackQuery, state: FSMContext):
-    """Статистика розсилок"""
-    await callback.answer()
-    await callback.message.edit_text(
-        "📊 <b>Статистика розсилок</b>\n\nФункція в розробці...",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_broadcast")]
-        ]),
-        parse_mode=get_default_parse_mode(),
-    )
+    
+    try:
+        from .formatters import format_broadcast_list_header
+        from .keyboards import get_broadcasts_list_keyboard
+        
+        # Отримуємо статистику
+        stats = await db_manager.get_broadcasts_statistics()
+        
+        # Отримуємо першу сторінку розсилок з сортуванням за датою
+        broadcasts = await db_manager.list_broadcasts(limit=settings.page_size, offset=0, sort_by="created_at_desc", status_filter="all")
+        
+        # Отримуємо загальну кількість сторінок
+        total_broadcasts = stats['total_broadcasts']
+        total_pages = (total_broadcasts + settings.page_size - 1) // settings.page_size if total_broadcasts > 0 else 1
+        
+        # Форматуємо заголовок
+        header_text = format_broadcast_list_header(
+            total_broadcasts=stats['total_broadcasts'],
+            sent_broadcasts=stats['sent_broadcasts'],
+            draft_broadcasts=stats['draft_broadcasts'],
+            current_page=1,
+            total_pages=total_pages,
+            status_filter="all"
+        )
+        
+        if not broadcasts:
+            header_text += "\n\n❌ <b>Розсилки не знайдені</b>\nПоки що немає створених розсилок."
+        
+        # Відправляємо повідомлення зі статистикою та списком розсилок
+        await callback.message.edit_text(
+            header_text,
+            reply_markup=get_broadcasts_list_keyboard(broadcasts, current_page=1, total_pages=total_pages, sort_by="created_at_desc", status_filter="all"),
+            parse_mode=get_default_parse_mode(),
+        )
+        
+        # Зберігаємо поточну сторінку та сортування в стані
+        await state.update_data(broadcasts_page=1, broadcasts_sort="created_at_desc", broadcasts_status_filter="all", total_pages=total_pages)
+        
+        logger.info(f"📋 Показано історію розсилок для адміна {callback.from_user.id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Помилка завантаження історії розсилок: {e}", exc_info=True)
+        await callback.message.edit_text(
+            f"❌ <b>Помилка завантаження</b>\n\n{str(e)}",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_broadcast")]
+            ]),
+            parse_mode=get_default_parse_mode(),
+        )
 
 
 @router.callback_query(F.data == "admin_create_broadcast")
@@ -293,7 +400,12 @@ async def save_media(message: Message, state: FSMContext):
     """Збереження медіа"""
     # Якщо це медіагрупа – збираємо всі елементи аналогічно створенню авто
     if getattr(message, 'media_group_id', None):
-        group_id = message.media_group_id
+        # Використовуємо комбінацію user_id + media_group_id для унікальності
+        # Це запобігає конфлікту між різними адміністраторами
+        user_id = message.from_user.id
+        media_group_id = message.media_group_id
+        group_id = f"{user_id}_{media_group_id}"
+        
         entry = _broadcast_media_groups.get(group_id)
         if not entry:
             entry = {
@@ -301,6 +413,9 @@ async def save_media(message: Message, state: FSMContext):
                 'chat_id': message.chat.id,
                 'bot': message.bot,
                 'state': state,
+                'created_at': datetime.now(),  # Додаємо timestamp для автоочищення
+                'user_id': user_id,  # Додаємо user_id для логування
+                'original_media_group_id': media_group_id,  # Зберігаємо оригінальний ID
             }
             _broadcast_media_groups[group_id] = entry
             # Запускаємо відкладену обробку групи
@@ -332,20 +447,70 @@ async def save_media(message: Message, state: FSMContext):
 
 
 async def _finalize_broadcast_media_group(group_id: str, delay: float):
+    """Фіналізація медіагрупи після затримки"""
     await asyncio.sleep(delay)
     entry = _broadcast_media_groups.get(group_id)
     if not entry:
+        logger.debug(f"Медіагрупа {group_id} вже оброблена або видалена")
         return
+    
     items: List[Dict] = entry['items']
     state: FSMContext = entry['state']
+    user_id = entry.get('user_id', 'unknown')
+    original_media_group_id = entry.get('original_media_group_id', group_id)
+    
     # Зберігаємо у стані як media_group з масивом елементів
-    await state.update_data(media={"type": "media_group", "items": items})
+    # Використовуємо original_media_group_id для збереження в БД
+    await state.update_data(media={"type": "media_group", "items": items, "group_id": original_media_group_id})
+    
     # Очищаємо кеш
-    del _broadcast_media_groups[group_id]
-    # Показуємо підсумок
+    try:
+        del _broadcast_media_groups[group_id]
+        logger.debug(f"✅ Медіагрупа {group_id} (користувач {user_id}) оброблена та видалена")
+    except KeyError:
+        logger.warning(f"⚠️ Медіагрупа {group_id} вже була видалена")
+    # Показуємо підсумок через бота напряму
     bot = entry['bot']
     chat_id = entry['chat_id']
-    await show_summary(Message(chat=message.chat, message_id=0, date=message.date, message_thread_id=None), state)
+    
+    # Отримуємо дані для підсумку
+    data = await state.get_data()
+    text = data.get("text", "")
+    button_text = data.get("button_text")
+    button_url = data.get("button_url")
+    media = data.get("media")
+    
+    summary_text = "📢 <b>Підсумок розсилки</b>\n\n"
+    summary_text += f"📝 <b>Текст:</b>\n{text}\n\n"
+    
+    if button_text and button_url:
+        summary_text += f"🔗 <b>Кнопка:</b> {button_text} → {button_url}\n\n"
+    
+    if media:
+        if media["type"] == "photo":
+            summary_text += "🖼️ <b>Медіа:</b> Фото\n\n"
+        elif media["type"] == "video":
+            summary_text += "🎥 <b>Медіа:</b> Відео\n\n"
+        elif media["type"] == "media_group":
+            summary_text += "📸 <b>Медіа:</b> Медіагрупа\n\n"
+    
+    summary_text += "Оберіть дію:"
+    
+    keyboard = [
+        [InlineKeyboardButton(text="✏️ Редагувати", callback_data="broadcast_edit")],
+        [InlineKeyboardButton(text="🚀 Відправити", callback_data="broadcast_send")],
+        [InlineKeyboardButton(text="❌ Скасувати", callback_data="admin_broadcast")],
+    ]
+    
+    # Відправляємо повідомлення через бота
+    await bot.send_message(
+        chat_id=chat_id,
+        text=summary_text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+        parse_mode=get_default_parse_mode(),
+    )
+    # Встановлюємо стан підтвердження
+    await state.set_state(BroadcastStates.confirm_send)
 
 
 async def show_summary(callback_or_message, state: FSMContext):
@@ -556,15 +721,14 @@ async def send_to_topic(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     
     topic_part = callback.data.split("_")[2]
-    if topic_part == "all":
-        # Передаємо керування до відправки у всі гілки
-        await send_to_all_topics(callback, state)
-        return
+    # "all" обробляється окремим обробником send_to_all_topics
+    # "general" обробляється тут
     if topic_part == "general":
         # Відправка у головний топік (без thread_id)
         await _send_broadcast_to_chat(callback, state, thread_id=None)
         return
     
+    # Інакше - це thread_id конкретного топіка
     thread_id = int(topic_part)
     await _send_broadcast_to_chat(callback, state, thread_id=thread_id)
 
@@ -584,6 +748,18 @@ async def send_to_all_topics(callback: CallbackQuery, state: FSMContext):
     button_url = data.get("button_url")
     media = data.get("media")
 
+    # Зберігаємо розсилку в БД перед відправкою
+    await db_manager.create_broadcast({
+        "text": text,
+        "button_text": button_text,
+        "button_url": button_url,
+        "media_type": media.get("type") if media else None,
+        "media_file_id": media.get("file_id") if media else None,
+        "media_group_id": media.get("group_id") if media and media.get("type") == "media_group" else None,
+        "status": "sent",
+        "target": "all_topics",  # Позначаємо, що це розсилка у всі гілки
+    })
+
     buttons = None
     if button_text and button_url:
         buttons = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=button_text, url=button_url)]])
@@ -593,33 +769,39 @@ async def send_to_all_topics(callback: CallbackQuery, state: FSMContext):
         return
     chat_id = settings.group_chat_id
 
-    # Спочатку General
+    # Спочатку General (thread_id = None)
     errors = 0
+    general_thread_id = None
     try:
         if media and media.get("type") == "photo":
-            await callback.bot.send_photo(chat_id, media.get("file_id"), caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode())
+            await callback.bot.send_photo(chat_id, media.get("file_id"), caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=general_thread_id)
         elif media and media.get("type") == "video":
-            await callback.bot.send_video(chat_id, media.get("file_id"), caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode())
+            video_file_id = _clean_file_id(media.get("file_id"))
+            await callback.bot.send_video(chat_id, video_file_id, caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=general_thread_id)
         elif media and media.get("type") == "media_group":
             from aiogram.types import InputMediaPhoto, InputMediaVideo
             media_items = []
             for item in media.get("items", []):
                 if item.get("type") == "photo":
-                    media_items.append(InputMediaPhoto(media=item.get("file_id"), caption=text if not media_items else None, parse_mode=get_default_parse_mode()))
+                    # Не додаємо caption до медіагрупи - текст буде тільки в повідомленні з кнопкою
+                    media_items.append(InputMediaPhoto(media=item.get("file_id")))
                 elif item.get("type") == "video":
-                    media_items.append(InputMediaVideo(media=item.get("file_id"), caption=text if not media_items else None, parse_mode=get_default_parse_mode()))
+                    video_file_id = _clean_file_id(item.get("file_id"))
+                    # Не додаємо caption до медіагрупи - текст буде тільки в повідомленні з кнопкою
+                    media_items.append(InputMediaVideo(media=video_file_id))
             if media_items:
                 # Media group не підтримує inline-кнопки в Telegram API
-                await callback.bot.send_media_group(chat_id, media=media_items, message_thread_id=thread_id)
-                # Надішлемо окреме повідомлення з кнопкою, якщо є
-                if buttons:
-                    await callback.bot.send_message(chat_id, text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=thread_id)
+                await callback.bot.send_media_group(chat_id, media=media_items, message_thread_id=general_thread_id)
+                # Надішлемо окреме повідомлення з текстом та кнопкою (якщо є текст або кнопка)
+                if text or buttons:
+                    await callback.bot.send_message(chat_id, text if text else "📢", reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=general_thread_id)
             else:
                 await callback.answer("❌ Порожня медіагрупа", show_alert=True)
                 return
         else:
-            await callback.bot.send_message(chat_id, text, reply_markup=buttons, parse_mode=get_default_parse_mode())
-    except Exception:
+            await callback.bot.send_message(chat_id, text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=general_thread_id)
+    except Exception as e:
+        logger.error(f"Помилка відправки розсилки в General: {e}")
         errors += 1
 
     # Потім усі гілки з БД
@@ -628,13 +810,31 @@ async def send_to_all_topics(callback: CallbackQuery, state: FSMContext):
             if media and media.get("type") == "photo":
                 await callback.bot.send_photo(chat_id, media.get("file_id"), caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=topic_id)
             elif media and media.get("type") == "video":
-                await callback.bot.send_video(chat_id, media.get("file_id"), caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=topic_id)
+                video_file_id = _clean_file_id(media.get("file_id"))
+                await callback.bot.send_video(chat_id, video_file_id, caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=topic_id)
             elif media and media.get("type") == "media_group":
-                await callback.answer("❌ Медіагрупи поки не підтримуються", show_alert=True)
-                return
+                from aiogram.types import InputMediaPhoto, InputMediaVideo
+                media_items = []
+                for item in media.get("items", []):
+                    if item.get("type") == "photo":
+                        # Не додаємо caption до медіагрупи - текст буде тільки в повідомленні з кнопкою
+                        media_items.append(InputMediaPhoto(media=item.get("file_id")))
+                    elif item.get("type") == "video":
+                        video_file_id = _clean_file_id(item.get("file_id"))
+                        # Не додаємо caption до медіагрупи - текст буде тільки в повідомленні з кнопкою
+                        media_items.append(InputMediaVideo(media=video_file_id))
+                if media_items:
+                    # Media group не підтримує inline-кнопки в Telegram API
+                    await callback.bot.send_media_group(chat_id, media=media_items, message_thread_id=topic_id)
+                    # Надішлемо окреме повідомлення з текстом та кнопкою (якщо є текст або кнопка)
+                    if text or buttons:
+                        await callback.bot.send_message(chat_id, text if text else "📢", reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=topic_id)
+                else:
+                    logger.warning(f"Порожня медіагрупа для топіка {topic_id}")
             else:
                 await callback.bot.send_message(chat_id, text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=topic_id)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Помилка відправки розсилки в топік {topic_id}: {e}")
             errors += 1
 
     if errors == 0:
@@ -655,16 +855,24 @@ async def _send_broadcast_to_chat(callback: CallbackQuery, state: FSMContext, th
     button_url = data.get("button_url")
     media = data.get("media")
 
+    # Визначаємо цільовий топік для збереження в БД
+    target_topic = "general" if thread_id is None else f"topic_{thread_id}"
+
     # Зберігаємо розсилку в історію (чернетку → sent)
-    await db_manager.create_broadcast({
-        "text": text,
-        "button_text": button_text,
-        "button_url": button_url,
-        "media_type": media.get("type") if media else None,
-        "media_file_id": media.get("file_id") if media else None,
-        "media_group_id": media.get("group_id") if media else None,
-        "status": "sent",
-    })
+    try:
+        await db_manager.create_broadcast({
+            "text": text,
+            "button_text": button_text,
+            "button_url": button_url,
+            "media_type": media.get("type") if media else None,
+            "media_file_id": media.get("file_id") if media else None,
+            "media_group_id": media.get("group_id") if media and media.get("type") == "media_group" else None,
+            "status": "sent",
+        })
+        logger.info(f"✅ Розсилка збережена в БД для топіка: {target_topic}")
+    except Exception as e:
+        logger.error(f"❌ Помилка збереження розсилки в БД: {e}")
+        # Продовжуємо відправку навіть якщо збереження не вдалося
 
     buttons = None
     if button_text and button_url:
@@ -681,21 +889,28 @@ async def _send_broadcast_to_chat(callback: CallbackQuery, state: FSMContext, th
         if media and media.get("type") == "photo":
             await callback.bot.send_photo(chat_id, media.get("file_id"), caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=thread_id)
         elif media and media.get("type") == "video":
-            await callback.bot.send_video(chat_id, media.get("file_id"), caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=thread_id)
+            video_file_id = _clean_file_id(media.get("file_id"))
+            await callback.bot.send_video(chat_id, video_file_id, caption=text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=thread_id)
         elif media and media.get("type") == "media_group":
             from aiogram.types import InputMediaPhoto, InputMediaVideo
             media_items = []
             for item in media.get("items", []):
                 if item.get("type") == "photo":
-                    media_items.append(InputMediaPhoto(media=item.get("file_id"), caption=text if not media_items else None, parse_mode=get_default_parse_mode()))
+                    # Не додаємо caption до медіагрупи - текст буде тільки в повідомленні з кнопкою
+                    media_items.append(InputMediaPhoto(media=item.get("file_id")))
                 elif item.get("type") == "video":
-                    media_items.append(InputMediaVideo(media=item.get("file_id"), caption=text if not media_items else None, parse_mode=get_default_parse_mode()))
+                    video_file_id = _clean_file_id(item.get("file_id"))
+                    # Не додаємо caption до медіагрупи - текст буде тільки в повідомленні з кнопкою
+                    media_items.append(InputMediaVideo(media=video_file_id))
             if media_items:
-                await callback.bot.send_media_group(chat_id, media=media_items)
-                if buttons:
-                    await callback.bot.send_message(chat_id, text, reply_markup=buttons, parse_mode=get_default_parse_mode())
+                await callback.bot.send_media_group(chat_id, media=media_items, message_thread_id=thread_id)
+                # Надішлемо окреме повідомлення з текстом та кнопкою (якщо є текст або кнопка)
+                if text or buttons:
+                    await callback.bot.send_message(chat_id, text if text else "📢", reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=thread_id)
             else:
-                errors += 1
+                logger.error("Порожня медіагрупа при відправці розсилки")
+                await callback.answer("❌ Помилка: порожня медіагрупа", show_alert=True)
+                return
         else:
             await callback.bot.send_message(chat_id, text, reply_markup=buttons, parse_mode=get_default_parse_mode(), message_thread_id=thread_id)
     except TelegramBadRequest as e:
@@ -716,247 +931,4 @@ async def _send_broadcast_to_chat(callback: CallbackQuery, state: FSMContext, th
         parse_mode=get_default_parse_mode(),
     )
 
-
-# ===== Блок налаштувань розсилки: додавання топіка групи =====
-
-def _build_topics_menu_blocks(topics: list) -> tuple[str, InlineKeyboardMarkup]:
-    """Повертає текст та клавіатуру для меню топіків (використовується повторно)."""
-    lines = ["🧵 <b>Управління топіками</b>", "", "Збережені топіки:"]
-    if topics:
-        for t in topics:
-            lines.append(f"• <b>{t.name}</b> (ID: <code>{t.thread_id}</code>)")
-    else:
-        lines.append("— Немає збережених топіків")
-
-    kb_rows = [[InlineKeyboardButton(text="➕ Додати топік групи", callback_data="broadcast_settings_add_topic")]]
-    if topics:
-        kb_rows.append([InlineKeyboardButton(text="📋 Усі топіки", callback_data="broadcast_topics_list")])
-    kb_rows.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_broadcast")])
-    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=kb_rows)
-
-
-@router.callback_query(F.data == "admin_topics")
-async def topics_menu(callback: CallbackQuery, state: FSMContext):
-    """Меню управління топіками (callback-версія)."""
-    await callback.answer()
-    topics = await db_manager.get_group_topics()
-    text, keyboard = _build_topics_menu_blocks(topics)
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=get_default_parse_mode())
-
-
-@router.callback_query(F.data == "broadcast_settings_add_topic")
-async def settings_add_topic_ask_name(callback: CallbackQuery, state: FSMContext):
-    """Крок 1: Запит назви топіка"""
-    await callback.answer()
-    await state.update_data(new_topic_name=None, new_topic_id=None)
-    await callback.message.edit_text(
-        "🧩 <b>Додавання топіка</b>\n\nВведіть назву топіка (для відображення в меню):",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_topics")]]),
-        parse_mode=get_default_parse_mode(),
-    )
-    await state.set_state(BroadcastStates.settings_waiting_topic_name)
-
-
-@router.message(BroadcastStates.settings_waiting_topic_name, F.text)
-async def settings_add_topic_save_name(message: Message, state: FSMContext):
-    """Зберегти назву та перейти до ID"""
-    name = (message.text or "").strip()
-    if not name:
-        await message.answer("❌ Назва не може бути порожньою. Спробуйте ще раз.")
-        return
-    await state.update_data(new_topic_name=name)
-    await message.answer(
-        "🧵 Введіть thread_id (ID гілки у групі, наприклад: 55):",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="broadcast_settings_add_topic")]]),
-        parse_mode=get_default_parse_mode(),
-    )
-    await state.set_state(BroadcastStates.settings_waiting_topic_id)
-
-
-@router.message(BroadcastStates.settings_waiting_topic_id, F.text)
-async def settings_add_topic_save_id(message: Message, state: FSMContext):
-    """Зберегти ID, upsert у БД та повернутись у меню налаштувань"""
-    text = (message.text or "").strip()
-    try:
-        thread_id = int(text)
-        if thread_id <= 0:
-            raise ValueError
-    except ValueError:
-        await message.answer("❌ Невірний thread_id. Вкажіть додатнє число, наприклад 55.")
-        return
-
-    data = await state.get_data()
-    name = data.get("new_topic_name") or str(thread_id)
-
-    await db_manager.upsert_group_topic(thread_id, name)
-
-    # Опціонально: сформувати посилання, якщо є username групи
-    link_hint = ""
-    if getattr(settings, "group_username", None):
-        link_hint = f"\n🔗 Можливе посилання: https://t.me/{settings.group_username}/{thread_id}"
-
-    await message.answer(
-        f"✅ Топік збережено: <b>{name}</b> (thread_id: <code>{thread_id}</code>){link_hint}",
-        parse_mode=get_default_parse_mode(),
-    )
-
-    # Повернення до меню налаштувань без фейкового CallbackQuery
-    await state.clear()
-    topics = await db_manager.get_group_topics()
-    text, keyboard = _build_topics_menu_blocks(topics)
-    await message.answer(text, reply_markup=keyboard, parse_mode=get_default_parse_mode())
-
-
-@router.callback_query(F.data == "broadcast_topics_list")
-async def topics_list(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    topics = await db_manager.get_group_topics()
-    if not topics:
-        await callback.message.edit_text(
-            "📋 <b>Усі топіки</b>\n\n— Немає збережених топіків",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_topics")]]),
-            parse_mode=get_default_parse_mode(),
-        )
-        return
-    kb = []
-    for t in topics:
-        kb.append([InlineKeyboardButton(text=f"{t.name} (ID: {t.thread_id})", callback_data=f"topic_view_{t.thread_id}")])
-    kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_topics")])
-    await callback.message.edit_text(
-        "📋 <b>Усі топіки</b>\n\nОберіть топік:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
-        parse_mode=get_default_parse_mode(),
-    )
-
-
-@router.callback_query(F.data.startswith("topic_view_"))
-async def topic_view(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    thread_id = int(callback.data.split("_")[-1])
-    topics = await db_manager.get_group_topics()
-    topic = next((t for t in topics if t.thread_id == thread_id), None)
-    if not topic:
-        await callback.answer("❌ Топік не знайдено", show_alert=True)
-        return
-    text = (
-        "🧵 <b>Топік</b>\n\n"
-        f"<b>Назва:</b> {topic.name}\n"
-        f"<b>ID:</b> <code>{topic.thread_id}</code>"
-    )
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✏️ Редагувати назву", callback_data=f"topic_rename_{topic.thread_id}")],
-        [InlineKeyboardButton(text="🔢 Редагувати ID", callback_data=f"topic_changeid_{topic.thread_id}")],
-        [InlineKeyboardButton(text="🗑️ Видалити", callback_data=f"topic_delete_{topic.thread_id}")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="broadcast_topics_list")],
-    ])
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode=get_default_parse_mode())
-
-
-@router.callback_query(F.data.startswith("topic_delete_"))
-async def settings_delete_topic(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    thread_id = int(callback.data.split("_")[-1])
-    await db_manager.delete_group_topic(thread_id)
-    await callback.answer("✅ Топік видалено", show_alert=True)
-    await topics_list(callback, state)
-
-
-@router.callback_query(F.data.startswith("topic_rename_"))
-async def settings_rename_topic_start(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    thread_id = int(callback.data.split("_")[-1])
-    await state.update_data(rename_thread_id=thread_id)
-    await callback.message.edit_text(
-        f"✏️ Введіть нову назву для топіка (ID: <code>{thread_id}</code>):",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="broadcast_topics_list")]]),
-        parse_mode=get_default_parse_mode(),
-    )
-    await state.set_state(BroadcastStates.settings_waiting_topic_name)
-
-
-@router.message(BroadcastStates.settings_waiting_topic_name, F.text)
-async def settings_rename_topic_save(message: Message, state: FSMContext):
-    data = await state.get_data()
-    thread_id = data.get("rename_thread_id")
-    if not thread_id:
-        await message.answer("❌ Помилка стану. Спробуйте ще раз.")
-        await state.clear()
-        return
-    name = (message.text or "").strip()
-    if not name:
-        await message.answer("❌ Назва не може бути порожньою.")
-        return
-    await db_manager.upsert_group_topic(thread_id, name)
-    await message.answer("✅ Назву змінено")
-    await state.clear()
-    # Повернення до списку топіків без фейкового CallbackQuery
-    topics = await db_manager.get_group_topics()
-    if not topics:
-        await message.answer(
-            "📋 <b>Усі топіки</b>\n\n— Немає збережених топіків",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_topics")]]),
-            parse_mode=get_default_parse_mode(),
-        )
-    else:
-        kb = []
-        for t in topics:
-            kb.append([InlineKeyboardButton(text=f"{t.name} (ID: {t.thread_id})", callback_data=f"topic_view_{t.thread_id}")])
-        kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_topics")])
-        await message.answer(
-            "📋 <b>Усі топіки</b>\n\nОберіть топік:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
-            parse_mode=get_default_parse_mode(),
-        )
-
-
-@router.callback_query(F.data.startswith("topic_changeid_"))
-async def settings_change_topic_id_start(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    thread_id = int(callback.data.split("_")[-1])
-    await state.update_data(changeid_old_thread_id=thread_id)
-    await callback.message.edit_text(
-        f"🔢 Введіть новий thread_id для топіка (поточний: <code>{thread_id}</code>):",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="broadcast_topics_list")]]),
-        parse_mode=get_default_parse_mode(),
-    )
-    await state.set_state(BroadcastStates.settings_waiting_topic_id)
-
-
-@router.message(BroadcastStates.settings_waiting_topic_id, F.text)
-async def settings_change_topic_id_save(message: Message, state: FSMContext):
-    data = await state.get_data()
-    old_thread_id = data.get("changeid_old_thread_id")
-    # якщо це не зміна ID, то це може бути додавання (потік додавання вже оброблено вище)
-    if not old_thread_id:
-        # це шлях додавання — він вже обробляється у settings_add_topic_save_id
-        return
-    text = (message.text or "").strip()
-    try:
-        new_thread_id = int(text)
-        if new_thread_id <= 0:
-            raise ValueError
-    except ValueError:
-        await message.answer("❌ Невірний thread_id. Вкажіть додатнє число.")
-        return
-    await db_manager.update_group_topic_thread_id(old_thread_id, new_thread_id)
-    await message.answer("✅ ID топіка змінено")
-    await state.clear()
-    # Повернення до списку топіків без фейкового CallbackQuery
-    topics = await db_manager.get_group_topics()
-    if not topics:
-        await message.answer(
-            "📋 <b>Усі топіки</b>\n\n— Немає збережених топіків",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_topics")]]),
-            parse_mode=get_default_parse_mode(),
-        )
-    else:
-        kb = []
-        for t in topics:
-            kb.append([InlineKeyboardButton(text=f"{t.name} (ID: {t.thread_id})", callback_data=f"topic_view_{t.thread_id}")])
-        kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_topics")])
-        await message.answer(
-            "📋 <b>Усі топіки</b>\n\nОберіть топік:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
-            parse_mode=get_default_parse_mode(),
-        )
 

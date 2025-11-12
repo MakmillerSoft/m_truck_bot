@@ -66,23 +66,8 @@ class BotPublisher:
         
         logger.info(f"🔍 _prepare_vehicle_model: отримані дані: {vehicle_data}")
         
-        # Мапінг типів авто
-        vehicle_type_mapping = {
-            "Контейнеровози": VehicleType.CONTAINER_CARRIER,
-            "Напівпричепи контейнеровози": VehicleType.SEMI_CONTAINER_CARRIER,
-            "Змінні кузови": VehicleType.VARIABLE_BODY,
-            "Сідельні тягачі": VehicleType.SADDLE_TRACTOR,
-            "Причіпи": VehicleType.TRAILER,
-            "Рефрижератори": VehicleType.REFRIGERATOR,
-            "Фургони": VehicleType.VAN,
-            "Буси": VehicleType.BUS
-        }
-        
-        # Мапінг стану авто
-        condition_mapping = {
-            "Новий": VehicleCondition.NEW,
-            "Вживане": VehicleCondition.USED
-        }
+        # Переклади для типів і станів (UA -> EN)
+        from ..shared.translations import reverse_translate_field_value
         
         # Отримуємо типи
         vehicle_type_str = vehicle_data.get('vehicle_type', '')
@@ -107,12 +92,22 @@ class BotPublisher:
         if year == 0:
             year = None  # Якщо рік не вказаний, встановлюємо None
         
-        condition = condition_mapping.get(condition_str, VehicleCondition.USED) if condition_str else VehicleCondition.USED
+        # Стан авто через зворотний переклад
+        condition_en = reverse_translate_field_value('condition', condition_str) if condition_str else None
+        try:
+            condition = VehicleCondition(condition_en) if condition_en else VehicleCondition.USED
+        except Exception:
+            condition = VehicleCondition.USED
         price = self._safe_float(vehicle_data.get('price'))
         if price == 0.0:
             price = None  # Якщо ціна не вказана, встановлюємо None
         
-        vehicle_type = vehicle_type_mapping.get(vehicle_type_str, VehicleType.SADDLE_TRACTOR)
+        # Тип авто через зворотний переклад 4-ох категорій до представницького EN
+        vehicle_type_en = reverse_translate_field_value('vehicle_type', vehicle_type_str)
+        try:
+            vehicle_type = VehicleType(vehicle_type_en)
+        except Exception:
+            raise ValueError(f"Невідомий тип авто: {vehicle_type_str}")
         
         logger.info(f"🔍 _prepare_vehicle_model: vehicle_type={vehicle_type}, condition={condition}")
         

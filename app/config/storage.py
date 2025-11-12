@@ -39,7 +39,7 @@ def create_storage() -> BaseStorage:
         return MemoryStorage()
 
     else:
-        print("📝 Використовуємо MemoryStorage")
+        print("Використовуємо MemoryStorage")
         return MemoryStorage()
 
 
