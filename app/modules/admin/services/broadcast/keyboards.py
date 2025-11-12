@@ -98,5 +98,3 @@ def get_broadcast_detail_keyboard(broadcast_id: int) -> InlineKeyboardMarkup:
 
 
 
-
-

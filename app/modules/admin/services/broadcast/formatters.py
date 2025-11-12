@@ -156,5 +156,3 @@ def format_broadcast_list_item(broadcast: BroadcastModel) -> str:
 
 
 
-
-
