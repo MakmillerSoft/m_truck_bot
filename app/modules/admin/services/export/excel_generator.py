@@ -62,6 +62,7 @@ class ExcelExporter:
         
         # Отримуємо користувачів
         users = await db_manager.get_all_users()
+        logger.info(f"📊 Отримано {len(users)} користувачів з БД для експорту")
         
         for user in users:
             # Безпечне отримання з словника
@@ -96,6 +97,7 @@ class ExcelExporter:
         
         # Отримуємо авто
         vehicles = await db_manager.get_all_vehicles()
+        logger.info(f"📊 Отримано {len(vehicles)} авто з БД для експорту")
         
         for vehicle in vehicles:
             # Безпечне отримання з словника
@@ -137,6 +139,7 @@ class ExcelExporter:
         
         # Отримуємо заявки
         requests = await db_manager.get_all_requests()
+        logger.info(f"📊 Отримано {len(requests)} заявок з БД для експорту")
         
         for request in requests:
             # request - це словник
@@ -171,6 +174,7 @@ class ExcelExporter:
         
         # Отримуємо розсилки
         broadcasts = await db_manager.get_all_broadcasts_raw()
+        logger.info(f"📊 Отримано {len(broadcasts)} розсилок з БД для експорту")
         
         for broadcast in broadcasts:
             # Безпечне отримання з словника
