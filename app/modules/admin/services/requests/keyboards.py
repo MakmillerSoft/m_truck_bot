@@ -10,7 +10,9 @@ def get_requests_main_keyboard(requests: list, status_filter: str = "all", sort:
         next_status = "new"
     elif status_filter == "new":
         next_status = "done"
-    else:  # done
+    elif status_filter == "done":
+        next_status = "cancelled"
+    else:  # cancelled
         next_status = "all"
     
     # Кнопки сортування (2 кнопки в 1 рядок) у стилі "Всі авто"
@@ -20,7 +22,7 @@ def get_requests_main_keyboard(requests: list, status_filter: str = "all", sort:
             callback_data=f"admin_requests:{status_filter}:{'oldest' if sort in ('newest','date_desc') else 'newest'}:{page}"
         ),
         InlineKeyboardButton(
-            text=f"📋 {'Всі' if status_filter=='all' else ('Нові' if status_filter=='new' else 'Опрацьовані')}",
+            text=f"📋 {'Всі' if status_filter=='all' else ('Нові' if status_filter=='new' else ('Опрацьовані' if status_filter=='done' else 'Скасовані'))}",
             callback_data=f"admin_requests:{next_status}:{sort}:{page}"
         ),
     ]
@@ -30,7 +32,13 @@ def get_requests_main_keyboard(requests: list, status_filter: str = "all", sort:
     for r in requests:
         # Форматуємо текст кнопки: емодзі статусу + користувач + телефон
         user = f"{r.get('first_name') or ''} {r.get('last_name') or ''}".strip() or "Без імені"
-        status_emoji = "🟢" if r.get('status') != 'done' else "🔵"
+        status = r.get('status', 'new')
+        if status == 'cancelled':
+            status_emoji = "❌"
+        elif status == 'done':
+            status_emoji = "🔵"
+        else:
+            status_emoji = "🟢"
         
         button_text = f"{status_emoji} {user}"
         
@@ -97,8 +105,15 @@ def get_request_detail_keyboard(request: dict, status_filter: str = "all", sort:
         rows.append([InlineKeyboardButton(text="👤 Відкрити користувача", callback_data=f"view_user_{request['user_id']}")])
     if request.get('vehicle_id_ref'):
         rows.append([InlineKeyboardButton(text="🚛 Відкрити авто", callback_data=f"view_vehicle_{request['vehicle_id_ref']}")])
-    # Зміна статусу
-    rows.append([InlineKeyboardButton(text=toggle_text, callback_data=f"toggle_request_status_{request['id']}")])
+    
+    # Зміна статусу - тільки якщо заявка не скасована
+    if request.get('status') != 'cancelled':
+        rows.append([InlineKeyboardButton(text=toggle_text, callback_data=f"toggle_request_status_{request['id']}")])
+        rows.append([InlineKeyboardButton(text="❌ Скасувати заявку", callback_data=f"cancel_request_{request['id']}")])
+    else:
+        # Для скасованих заявок показуємо кнопку відновлення
+        rows.append([InlineKeyboardButton(text="♻️ Відновити заявку", callback_data=f"restore_request_{request['id']}")])
+    
     # Назад до списку заявок із збереженими фільтрами
     rows.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"admin_requests:{status_filter}:{sort}:{page}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

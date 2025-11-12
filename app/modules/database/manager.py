@@ -1530,7 +1530,7 @@ class DatabaseManager:
         if user_id:
             where_clauses.append("mr.user_id = ?")
             params.append(user_id)
-        if status_filter in {"new", "done"}:
+        if status_filter in {"new", "done", "cancelled"}:
             where_clauses.append("mr.status = ?")
             params.append(status_filter)
 
@@ -1567,7 +1567,7 @@ class DatabaseManager:
         """Повернути кількість заявок з урахуванням фільтра"""
         query = "SELECT COUNT(*) FROM manager_requests"
         params = []
-        if status_filter in {"new", "done"}:
+        if status_filter in {"new", "done", "cancelled"}:
             query += " WHERE status = ?"
             params.append(status_filter)
         async with aiosqlite.connect(self.db_path) as db:
@@ -1576,7 +1576,7 @@ class DatabaseManager:
                 return int(row[0])
 
     async def get_manager_requests_stats(self) -> dict:
-        """Повернути статистику заявок: total/new/done"""
+        """Повернути статистику заявок: total/new/done/cancelled"""
         async with aiosqlite.connect(self.db_path) as db:
             # Загальна
             async with db.execute("SELECT COUNT(*) FROM manager_requests") as c1:
@@ -1587,7 +1587,10 @@ class DatabaseManager:
             # Опрацьовані
             async with db.execute("SELECT COUNT(*) FROM manager_requests WHERE status = 'done'") as c3:
                 done_cnt = int((await c3.fetchone())[0])
-        return {"total": total, "new": new_cnt, "done": done_cnt}
+            # Скасовані
+            async with db.execute("SELECT COUNT(*) FROM manager_requests WHERE status = 'cancelled'") as c4:
+                cancelled_cnt = int((await c4.fetchone())[0])
+        return {"total": total, "new": new_cnt, "done": done_cnt, "cancelled": cancelled_cnt}
 
     async def update_manager_request_status(self, request_id: int, status: str, admin_id: int = None) -> None:
         """Оновити статус заявки з логуванням адміністратора"""

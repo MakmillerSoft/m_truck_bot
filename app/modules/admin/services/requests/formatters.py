@@ -8,7 +8,8 @@ def format_requests_list(requests: List[Dict], status_filter: str = "all", sort:
     status_text_map = {
         "all": "Всі заявки",
         "new": "Нові заявки",
-        "done": "Опрацьовані заявки"
+        "done": "Опрацьовані заявки",
+        "cancelled": "Скасовані заявки"
     }
     status_text = status_text_map.get(status_filter, "Всі заявки")
     
@@ -20,6 +21,7 @@ def format_requests_list(requests: List[Dict], status_filter: str = "all", sort:
         text += f"• 📨 <b>Всього заявок:</b> {stats.get('total', 0)}\n"
         text += f"• 🟢 <b>Нових:</b> {stats.get('new', 0)}\n"
         text += f"• 🔵 <b>Опрацьованих:</b> {stats.get('done', 0)}\n"
+        text += f"• ❌ <b>Скасованих:</b> {stats.get('cancelled', 0)}\n"
     else:
         text += f"• 📨 <b>Знайдено заявок:</b> {total}\n"
     
@@ -50,7 +52,7 @@ def format_request_detail(r: Dict) -> str:
     """Формат детальної картки заявки у зрозумілому вигляді для адміна."""
     user = f"{r.get('first_name') or ''} {r.get('last_name') or ''}".strip() or "Без імені"
 
-    status_map = {"new": "🟢 Нова", "done": "🔵 Опрацьована"}
+    status_map = {"new": "🟢 Нова", "done": "🔵 Опрацьована", "cancelled": "❌ Скасована"}
     status_text = status_map.get(r.get("status"), r.get("status") or "—")
 
     type_map = {
