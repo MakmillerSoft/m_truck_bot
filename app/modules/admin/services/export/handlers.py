@@ -12,7 +12,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from app.modules.admin.core.access_control import AdminAccessFilter
 from app.utils.formatting import get_default_parse_mode
 from .keyboards import get_export_main_keyboard, get_export_back_keyboard
-from .excel_generator import generate_excel_export
+from .excel_generator import generate_excel_export, ExcelExporter
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin_export_handlers")
