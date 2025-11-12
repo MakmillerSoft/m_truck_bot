@@ -66,7 +66,14 @@ class ExcelExporter:
         logger.info(f"📊 Отримано {len(users)} користувачів з БД для експорту")
         
         for user in users:
-            # Безпечне отримання з словника - ВСІ поля з БД
+            # Функція для безпечного перекладу
+            def safe_translate(field_key: str, value: any) -> str:
+                """Безпечно перекласти значення поля"""
+                if not value or value == "":
+                    return ""
+                return translate_field_value(field_key, str(value))
+            
+            # Безпечне отримання з словника - ВСІ поля з БД + ПЕРЕКЛАДИ
             ws.append([
                 user.get('id', ''),
                 user.get('telegram_id', ''),
@@ -74,7 +81,7 @@ class ExcelExporter:
                 user.get('last_name', '') or "",
                 user.get('username', '') or "",
                 user.get('phone', '') or "",
-                user.get('role', '') or "",
+                safe_translate('role', user.get('role')),  # ПЕРЕКЛАД
                 "Так" if user.get('is_active') else "Ні",
                 "Так" if user.get('is_verified') else "Ні",
                 user.get('created_at', '') or "",
@@ -210,14 +217,21 @@ class ExcelExporter:
         logger.info(f"📊 Отримано {len(requests)} заявок з БД для експорту")
         
         for request in requests:
-            # request - це словник - тільки реальні поля з БД
+            # Функція для безпечного перекладу
+            def safe_translate(field_key: str, value: any) -> str:
+                """Безпечно перекласти значення поля"""
+                if not value or value == "":
+                    return ""
+                return translate_field_value(field_key, str(value))
+            
+            # request - це словник - тільки реальні поля з БД + ПЕРЕКЛАДИ
             ws.append([
                 request.get('id', ''),
                 request.get('user_id', ''),
                 request.get('vehicle_id', ''),
-                request.get('request_type', ''),
+                safe_translate('request_type', request.get('request_type')),  # ПЕРЕКЛАД
                 request.get('details', ''),
-                request.get('status', ''),
+                safe_translate('request_status', request.get('status')),  # ПЕРЕКЛАД
                 request.get('created_at', ''),
                 request.get('updated_at', '')
             ])
@@ -244,7 +258,14 @@ class ExcelExporter:
         logger.info(f"📊 Отримано {len(broadcasts)} розсилок з БД для експорту")
         
         for broadcast in broadcasts:
-            # Безпечне отримання з словника - ВСІ поля з БД
+            # Функція для безпечного перекладу
+            def safe_translate(field_key: str, value: any) -> str:
+                """Безпечно перекласти значення поля"""
+                if not value or value == "":
+                    return ""
+                return translate_field_value(field_key, str(value))
+            
+            # Безпечне отримання з словника - ВСІ поля з БД + ПЕРЕКЛАДИ
             text = broadcast.get('text', '') or ""
             text_short = (text[:50] + "...") if text and len(text) > 50 else text
             
@@ -253,11 +274,11 @@ class ExcelExporter:
                 text_short,
                 broadcast.get('button_text', '') or "",
                 broadcast.get('button_url', '') or "",
-                broadcast.get('media_type', '') or "",
+                safe_translate('media_type', broadcast.get('media_type')),  # ПЕРЕКЛАД
                 broadcast.get('media_file_id', '') or "",
                 broadcast.get('media_group_id', '') or "",
-                broadcast.get('status', '') or "",
-                broadcast.get('schedule_period', '') or "",
+                safe_translate('broadcast_status', broadcast.get('status')),  # ПЕРЕКЛАД
+                safe_translate('schedule_period', broadcast.get('schedule_period')),  # ПЕРЕКЛАД
                 broadcast.get('scheduled_at', '') or "",
                 broadcast.get('created_at', '') or ""
             ])

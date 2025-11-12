@@ -39,6 +39,36 @@ def translate_field_value(field_key: str, value: str) -> str:
         },
         "location": {
             "lutsk": "Луцьк"
+        },
+        # === НОВІ ПЕРЕКЛАДИ ДЛЯ ІНШИХ ТАБЛИЦЬ ===
+        "role": {
+            "buyer": "Покупець",
+            "admin": "Адміністратор"
+        },
+        "request_type": {
+            "general": "Загальна заявка",
+            "vehicle_application": "Заявка на авто"
+        },
+        "request_status": {
+            "new": "Нова",
+            "in_progress": "В обробці",
+            "completed": "Виконана",
+            "cancelled": "Скасована"
+        },
+        "broadcast_status": {
+            "draft": "Чернетка",
+            "sent": "Відправлено",
+            "scheduled": "Заплановано"
+        },
+        "schedule_period": {
+            "none": "Не повторювати",
+            "daily": "Щоденно",
+            "weekly": "Щотижня"
+        },
+        "media_type": {
+            "photo": "Фото",
+            "video": "Відео",
+            "media_group": "Медіагрупа"
         }
     }
     
