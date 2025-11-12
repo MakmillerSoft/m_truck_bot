@@ -88,6 +88,12 @@ def get_broadcast_detail_keyboard(broadcast_id: int) -> InlineKeyboardMarkup:
     """Клавіатура для детального перегляду розсилки"""
     buttons = []
     
+    # Кнопка "Видалити розсилку"
+    buttons.append([InlineKeyboardButton(
+        text="🗑️ Видалити розсилку",
+        callback_data=f"delete_broadcast_{broadcast_id}"
+    )])
+    
     # Кнопка "Назад до списку"
     buttons.append([InlineKeyboardButton(
         text="🔙 Назад",
@@ -95,6 +101,28 @@ def get_broadcast_detail_keyboard(broadcast_id: int) -> InlineKeyboardMarkup:
     )])
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_broadcast_delete_confirmation_keyboard(broadcast_id: int) -> InlineKeyboardMarkup:
+    """Клавіатура підтвердження видалення розсилки"""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="✅ Так, видалити",
+                callback_data=f"confirm_delete_broadcast_{broadcast_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="❌ Скасувати",
+                callback_data=f"view_broadcast_{broadcast_id}"
+            )
+        ]
+    ]
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 
 
 

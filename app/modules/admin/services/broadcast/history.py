@@ -12,7 +12,7 @@ from app.utils.formatting import get_default_parse_mode
 from app.modules.database.manager import db_manager
 from app.config.settings import settings
 from .formatters import format_broadcast_list_header, format_broadcast_card
-from .keyboards import get_broadcasts_list_keyboard, get_broadcast_detail_keyboard
+from .keyboards import get_broadcasts_list_keyboard, get_broadcast_detail_keyboard, get_broadcast_delete_confirmation_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin_broadcast_history")
@@ -292,5 +292,70 @@ async def back_to_broadcasts_list(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"❌ Помилка повернення до списку розсилок: {e}", exc_info=True)
         await callback.answer("❌ Помилка", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("delete_broadcast_"))
+async def delete_broadcast_request(callback: CallbackQuery, state: FSMContext):
+    """Запит підтвердження видалення розсилки"""
+    await callback.answer()
+    
+    try:
+        # Отримуємо ID розсилки
+        broadcast_id = int(callback.data.replace("delete_broadcast_", ""))
+        
+        # Отримуємо розсилку з БД
+        broadcast = await db_manager.get_broadcast_by_id(broadcast_id)
+        
+        if not broadcast:
+            await callback.answer("❌ Розсилка не знайдена", show_alert=True)
+            return
+        
+        # Показуємо підтвердження
+        confirmation_text = (
+            "⚠️ <b>Підтвердження видалення</b>\n\n"
+            f"Ви впевнені що хочете видалити розсилку <b>#{broadcast_id}</b>?\n\n"
+            "⚠️ <b>Увага:</b> Цю дію неможливо скасувати!"
+        )
+        
+        await callback.message.edit_text(
+            confirmation_text,
+            reply_markup=get_broadcast_delete_confirmation_keyboard(broadcast_id),
+            parse_mode=get_default_parse_mode(),
+        )
+        
+        logger.info(f"⚠️ Запит видалення розсилки {broadcast_id} від адміна {callback.from_user.id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Помилка запиту видалення розсилки: {e}", exc_info=True)
+        await callback.answer("❌ Помилка", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("confirm_delete_broadcast_"))
+async def confirm_delete_broadcast(callback: CallbackQuery, state: FSMContext):
+    """Підтверджене видалення розсилки"""
+    await callback.answer()
+    
+    try:
+        # Отримуємо ID розсилки
+        broadcast_id = int(callback.data.replace("confirm_delete_broadcast_", ""))
+        
+        # Видаляємо розсилку з БД
+        success = await db_manager.delete_broadcast(broadcast_id)
+        
+        if not success:
+            await callback.answer("❌ Помилка видалення розсилки", show_alert=True)
+            return
+        
+        # Повідомляємо про успіх
+        await callback.answer("✅ Розсилку видалено", show_alert=True)
+        
+        logger.info(f"✅ Розсилку {broadcast_id} видалено адміном {callback.from_user.id}")
+        
+        # Повертаємо до списку розсилок
+        await back_to_broadcasts_list(callback, state)
+        
+    except Exception as e:
+        logger.error(f"❌ Помилка видалення розсилки: {e}", exc_info=True)
+        await callback.answer("❌ Помилка видалення", show_alert=True)
 
 

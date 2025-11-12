@@ -1327,6 +1327,18 @@ class DatabaseManager:
                 
                 return BroadcastModel(**broadcast_data)
 
+    async def delete_broadcast(self, broadcast_id: int) -> bool:
+        """Видалити розсилку з БД"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("DELETE FROM broadcasts WHERE id = ?", (broadcast_id,))
+                await db.commit()
+                logger.info(f"✅ Розсилку {broadcast_id} видалено з БД")
+                return True
+        except Exception as e:
+            logger.error(f"❌ Помилка видалення розсилки {broadcast_id}: {e}")
+            return False
+
     # ===== Збережені авто =====
 
     async def save_vehicle(
