@@ -37,4 +37,8 @@ htmlcov/
 # Node (if any)
 node_modules/
 
-# Note: DB files are intentionally tracked
+# Database (production data, don't overwrite on server)
+data/truck_bot.db
+*.db-journal
+*.db-wal
+*.db-shm
