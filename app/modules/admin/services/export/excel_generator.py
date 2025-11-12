@@ -87,11 +87,31 @@ class ExcelExporter:
         """Експортувати авто"""
         ws = self.wb.create_sheet("Авто")
         
-        # Заголовки
+        # Заголовки - ВСІ поля з БД
         headers = [
-            "ID", "Тип", "Марка", "Модель", "VIN", "Рік", "Стан", 
-            "Ціна", "Пробіг", "Паливо", "Коробка", "Локація", 
-            "Статус", "Активність", "Продавець ID", "Створено", "Оновлено"
+            # Основна інформація
+            "ID", "Тип", "Марка", "Модель", "VIN", "Рік", "Стан",
+            # Ціна та валюта
+            "Ціна", "Валюта", "Пробіг (км)",
+            # Двигун
+            "Об'єм двигуна (л)", "Потужність (к.с.)", "Тип палива",
+            # Трансмісія та кузов
+            "Коробка передач", "Тип кузова", "Радіус коліс",
+            # Вантажні характеристики
+            "Вантажопідйомність (кг)", "Загальна маса (кг)", "Габарити відсіку",
+            # Локація та опис
+            "Локація", "Опис",
+            # Фото
+            "Кількість фото", "Головне фото",
+            # Статус та активність
+            "Статус", "Активність", "Перегляди",
+            # Публікація
+            "Опубліковано в групу", "Опубліковано в бот", "Дата публікації",
+            "ID повідомлення в групі", "ID повідомлення в боті",
+            # Дати
+            "Дата зміни статусу", "Дата продажу",
+            # Системні поля
+            "Продавець ID", "Створено", "Оновлено"
         ]
         ws.append(headers)
         
@@ -100,8 +120,19 @@ class ExcelExporter:
         logger.info(f"📊 Отримано {len(vehicles)} авто з БД для експорту")
         
         for vehicle in vehicles:
-            # Безпечне отримання з словника
+            # Обробка photos JSON
+            photos_count = 0
+            if vehicle.get('photos'):
+                try:
+                    import json
+                    photos_list = json.loads(vehicle.get('photos')) if isinstance(vehicle.get('photos'), str) else vehicle.get('photos')
+                    photos_count = len(photos_list) if photos_list else 0
+                except:
+                    photos_count = 0
+            
+            # Безпечне отримання з словника - ВСІ поля
             ws.append([
+                # Основна інформація
                 vehicle.get('id', ''),
                 vehicle.get('vehicle_type', '') or "",
                 vehicle.get('brand', '') or "",
@@ -109,13 +140,42 @@ class ExcelExporter:
                 vehicle.get('vin_code', '') or "",
                 vehicle.get('year', '') or "",
                 vehicle.get('condition', '') or "",
+                # Ціна та валюта
                 vehicle.get('price', '') or "",
+                vehicle.get('currency', '') or "USD",
                 vehicle.get('mileage', '') or "",
+                # Двигун
+                vehicle.get('engine_volume', '') or "",
+                vehicle.get('power_hp', '') or "",
                 vehicle.get('fuel_type', '') or "",
+                # Трансмісія та кузов
                 vehicle.get('transmission', '') or "",
+                vehicle.get('body_type', '') or "",
+                vehicle.get('wheel_radius', '') or "",
+                # Вантажні характеристики
+                vehicle.get('load_capacity', '') or "",
+                vehicle.get('total_weight', '') or "",
+                vehicle.get('cargo_dimensions', '') or "",
+                # Локація та опис
                 vehicle.get('location', '') or "",
+                vehicle.get('description', '') or "",
+                # Фото
+                photos_count,
+                vehicle.get('main_photo', '') or "",
+                # Статус та активність
                 vehicle.get('status', '') or "",
                 "Активне" if vehicle.get('is_active') else "Неактивне",
+                vehicle.get('views_count', '') or 0,
+                # Публікація
+                "Так" if vehicle.get('published_in_group') else "Ні",
+                "Так" if vehicle.get('published_in_bot') else "Ні",
+                vehicle.get('published_at', '') or "",
+                vehicle.get('group_message_id', '') or "",
+                vehicle.get('bot_message_id', '') or "",
+                # Дати
+                vehicle.get('status_changed_at', '') or "",
+                vehicle.get('sold_at', '') or "",
+                # Системні поля
                 vehicle.get('seller_id', '') or "",
                 vehicle.get('created_at', '') or "",
                 vehicle.get('updated_at', '') or ""
