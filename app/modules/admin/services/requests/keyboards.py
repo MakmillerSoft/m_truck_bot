@@ -98,7 +98,15 @@ def get_requests_main_keyboard(requests: list, status_filter: str = "all", sort:
 
 
 def get_request_detail_keyboard(request: dict, status_filter: str = "all", sort: str = "newest", page: int = 1) -> InlineKeyboardMarkup:
-    toggle_text = "🔄 Позначити як Опрацьована" if request.get('status') != 'done' else "🔄 Позначити як Нова"
+    # Визначаємо текст кнопки зміни статусу залежно від поточного
+    current_status = request.get('status', 'new')
+    if current_status == 'new':
+        toggle_text = "🔄 Позначити як Опрацьовану"
+    elif current_status == 'done':
+        toggle_text = "🔄 Позначити як Скасовану"
+    else:  # cancelled
+        toggle_text = "🔄 Позначити як Нову"
+    
     rows = []
     # Дії переходу
     if request.get('user_id'):
@@ -106,16 +114,34 @@ def get_request_detail_keyboard(request: dict, status_filter: str = "all", sort:
     if request.get('vehicle_id_ref'):
         rows.append([InlineKeyboardButton(text="🚛 Відкрити авто", callback_data=f"view_vehicle_{request['vehicle_id_ref']}")])
     
-    # Зміна статусу - тільки якщо заявка не скасована
-    if request.get('status') != 'cancelled':
-        rows.append([InlineKeyboardButton(text=toggle_text, callback_data=f"toggle_request_status_{request['id']}")])
-        rows.append([InlineKeyboardButton(text="❌ Скасувати заявку", callback_data=f"cancel_request_{request['id']}")])
-    else:
-        # Для скасованих заявок показуємо кнопку відновлення
-        rows.append([InlineKeyboardButton(text="♻️ Відновити заявку", callback_data=f"restore_request_{request['id']}")])
+    # Зміна статусу (циклічна)
+    rows.append([InlineKeyboardButton(text=toggle_text, callback_data=f"toggle_request_status_{request['id']}")])
+    
+    # Видалення заявки
+    rows.append([InlineKeyboardButton(text="🗑️ Видалити заявку", callback_data=f"delete_request_{request['id']}")])
     
     # Назад до списку заявок із збереженими фільтрами
     rows.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"admin_requests:{status_filter}:{sort}:{page}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_request_delete_confirmation_keyboard(request_id: int, status_filter: str = "all", sort: str = "newest", page: int = 1) -> InlineKeyboardMarkup:
+    """Клавіатура підтвердження видалення заявки"""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="✅ Так, видалити",
+                callback_data=f"confirm_delete_request_{request_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="❌ Скасувати",
+                callback_data=f"view_request_{request_id}"
+            )
+        ]
+    ]
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

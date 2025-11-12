@@ -115,7 +115,15 @@ async def toggle_request_status(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Заявку не знайдено", show_alert=True)
         return
 
-    new_status = "done" if r.get("status") != "done" else "new"
+    # Циклічна зміна статусу: new → done → cancelled → new
+    current_status = r.get("status", "new")
+    if current_status == "new":
+        new_status = "done"
+    elif current_status == "done":
+        new_status = "cancelled"
+    else:  # cancelled
+        new_status = "new"
+    
     admin_id = callback.from_user.id
     await db_manager.update_manager_request_status(req_id, new_status, admin_id)
 
@@ -136,71 +144,66 @@ async def toggle_request_status(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(F.data.startswith("cancel_request_"))
-async def cancel_request(callback: CallbackQuery, state: FSMContext):
-    """Скасувати заявку"""
+@router.callback_query(F.data.startswith("delete_request_"))
+async def delete_request_ask(callback: CallbackQuery, state: FSMContext):
+    """Запит підтвердження видалення заявки"""
     await callback.answer()
     req_id = int(callback.data.split("_")[-1])
 
-    # Отримати поточну заявку
+    # Отримати заявку
     all_requests = await db_manager.get_manager_requests()
     r = next((x for x in all_requests if x["id"] == req_id), None)
     if not r:
         await callback.answer("❌ Заявку не знайдено", show_alert=True)
         return
 
-    # Встановити статус "cancelled"
-    admin_id = callback.from_user.id
-    await db_manager.update_manager_request_status(req_id, "cancelled", admin_id)
-
-    # Отримати збережені фільтри для навігації "Назад"
+    # Показати підтвердження
+    from .keyboards import get_request_delete_confirmation_keyboard
+    confirmation_text = (
+        "⚠️ <b>Підтвердження видалення</b>\n\n"
+        f"Ви впевнені що хочете видалити заявку <b>#{req_id}</b>?\n\n"
+        "⚠️ <b>Увага:</b> Цю дію неможливо скасувати!"
+    )
+    
+    # Отримати збережені фільтри
     current_filters = await state.get_data()
     status_filter = current_filters.get("requests_status_filter", "all")
     sort = current_filters.get("requests_sort", "newest")
     page = current_filters.get("requests_page", 1)
-
-    # Показати оновлену детальну картку
-    updated = await db_manager.get_manager_requests()
-    r2 = next((x for x in updated if x["id"] == req_id), None)
-    text = format_request_detail(r2)
+    
     await callback.message.edit_text(
-        text,
-        reply_markup=get_request_detail_keyboard(r2, status_filter=status_filter, sort=sort, page=page),
+        confirmation_text,
+        reply_markup=get_request_delete_confirmation_keyboard(req_id, status_filter, sort, page),
         parse_mode=get_default_parse_mode(),
     )
 
 
-@router.callback_query(F.data.startswith("restore_request_"))
-async def restore_request(callback: CallbackQuery, state: FSMContext):
-    """Відновити скасовану заявку"""
+@router.callback_query(F.data.startswith("confirm_delete_request_"))
+async def confirm_delete_request(callback: CallbackQuery, state: FSMContext):
+    """Підтверджене видалення заявки"""
     await callback.answer()
     req_id = int(callback.data.split("_")[-1])
 
-    # Отримати поточну заявку
-    all_requests = await db_manager.get_manager_requests()
-    r = next((x for x in all_requests if x["id"] == req_id), None)
-    if not r:
-        await callback.answer("❌ Заявку не знайдено", show_alert=True)
+    # Видаляємо заявку з БД
+    success = await db_manager.delete_manager_request(req_id)
+    
+    if not success:
+        await callback.answer("❌ Помилка видалення заявки", show_alert=True)
         return
-
-    # Встановити статус "new"
-    admin_id = callback.from_user.id
-    await db_manager.update_manager_request_status(req_id, "new", admin_id)
-
-    # Отримати збережені фільтри для навігації "Назад"
+    
+    # Повідомляємо про успіх
+    await callback.answer("✅ Заявку видалено", show_alert=True)
+    
+    logger.info(f"✅ Заявку {req_id} видалено адміном {callback.from_user.id}")
+    
+    # Повертаємо до списку заявок
     current_filters = await state.get_data()
     status_filter = current_filters.get("requests_status_filter", "all")
     sort = current_filters.get("requests_sort", "newest")
     page = current_filters.get("requests_page", 1)
-
-    # Показати оновлену детальну картку
-    updated = await db_manager.get_manager_requests()
-    r2 = next((x for x in updated if x["id"] == req_id), None)
-    text = format_request_detail(r2)
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_request_detail_keyboard(r2, status_filter=status_filter, sort=sort, page=page),
-        parse_mode=get_default_parse_mode(),
-    )
+    
+    # Викликаємо оновлення списку
+    callback.data = f"admin_requests:{status_filter}:{sort}:{page}"
+    await open_requests_callback(callback, state)
 
 

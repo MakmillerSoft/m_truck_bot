@@ -1624,6 +1624,18 @@ class DatabaseManager:
                 )
             await db.commit()
 
+    async def delete_manager_request(self, request_id: int) -> bool:
+        """Видалити заявку з БД"""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("DELETE FROM manager_requests WHERE id = ?", (request_id,))
+                await db.commit()
+                logger.info(f"✅ Заявку {request_id} видалено з БД")
+                return True
+        except Exception as e:
+            logger.error(f"❌ Помилка видалення заявки {request_id}: {e}")
+            return False
+
     # ===== Історія пошуків =====
 
     async def save_search_history(
