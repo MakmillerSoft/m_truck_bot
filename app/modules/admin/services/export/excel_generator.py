@@ -9,6 +9,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from app.modules.database.manager import db_manager
+from app.modules.admin.services.vehicle_management.shared.translations import translate_field_value
 
 logger = logging.getLogger(__name__)
 
@@ -130,16 +131,23 @@ class ExcelExporter:
                 except:
                     photos_count = 0
             
-            # Безпечне отримання з словника - ВСІ поля
+            # Функція для безпечного перекладу
+            def safe_translate(field_key: str, value: any) -> str:
+                """Безпечно перекласти значення поля"""
+                if not value or value == "":
+                    return ""
+                return translate_field_value(field_key, str(value))
+            
+            # Безпечне отримання з словника - ВСІ поля з ПЕРЕКЛАДАМИ
             ws.append([
                 # Основна інформація
                 vehicle.get('id', ''),
-                vehicle.get('vehicle_type', '') or "",
+                safe_translate('vehicle_type', vehicle.get('vehicle_type')),  # ПЕРЕКЛАД
                 vehicle.get('brand', '') or "",
                 vehicle.get('model', '') or "",
                 vehicle.get('vin_code', '') or "",
                 vehicle.get('year', '') or "",
-                vehicle.get('condition', '') or "",
+                safe_translate('condition', vehicle.get('condition')),  # ПЕРЕКЛАД
                 # Ціна та валюта
                 vehicle.get('price', '') or "",
                 vehicle.get('currency', '') or "USD",
@@ -147,9 +155,9 @@ class ExcelExporter:
                 # Двигун
                 vehicle.get('engine_volume', '') or "",
                 vehicle.get('power_hp', '') or "",
-                vehicle.get('fuel_type', '') or "",
+                safe_translate('fuel_type', vehicle.get('fuel_type')),  # ПЕРЕКЛАД
                 # Трансмісія та кузов
-                vehicle.get('transmission', '') or "",
+                safe_translate('transmission', vehicle.get('transmission')),  # ПЕРЕКЛАД
                 vehicle.get('body_type', '') or "",
                 vehicle.get('wheel_radius', '') or "",
                 # Вантажні характеристики
@@ -157,13 +165,13 @@ class ExcelExporter:
                 vehicle.get('total_weight', '') or "",
                 vehicle.get('cargo_dimensions', '') or "",
                 # Локація та опис
-                vehicle.get('location', '') or "",
+                safe_translate('location', vehicle.get('location')),  # ПЕРЕКЛАД
                 vehicle.get('description', '') or "",
                 # Фото
                 photos_count,
                 vehicle.get('main_photo', '') or "",
                 # Статус та активність
-                vehicle.get('status', '') or "",
+                safe_translate('status', vehicle.get('status')),  # ПЕРЕКЛАД
                 "Активне" if vehicle.get('is_active') else "Неактивне",
                 vehicle.get('views_count', '') or 0,
                 # Публікація
