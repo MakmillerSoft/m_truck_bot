@@ -53,7 +53,8 @@ def translate_field_value(field_key: str, value: str) -> str:
             "new": "Нова",
             "in_progress": "В обробці",
             "completed": "Виконана",
-            "cancelled": "Скасована"
+            "cancelled": "Скасована",
+            "done": "Опрацьована"
         },
         "broadcast_status": {
             "draft": "Чернетка",

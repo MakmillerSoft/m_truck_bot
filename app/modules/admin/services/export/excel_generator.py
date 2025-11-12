@@ -112,7 +112,7 @@ class ExcelExporter:
             # Локація та опис
             "Локація", "Опис",
             # Фото
-            "Кількість фото", "Головне фото",
+            "Кількість фото", "Головне фото", "Тип головного фото", "Всі фото (JSON)",
             # Статус та активність
             "Статус", "Активність",
             # Публікація
@@ -132,13 +132,26 @@ class ExcelExporter:
         for vehicle in vehicles:
             # Обробка photos JSON
             photos_count = 0
+            photos_json = ""
             if vehicle.get('photos'):
                 try:
                     import json
                     photos_list = json.loads(vehicle.get('photos')) if isinstance(vehicle.get('photos'), str) else vehicle.get('photos')
                     photos_count = len(photos_list) if photos_list else 0
+                    # Зберігаємо як JSON рядок для експорту
+                    photos_json = json.dumps(photos_list, ensure_ascii=False) if photos_list else ""
                 except:
                     photos_count = 0
+                    photos_json = ""
+            
+            # Визначення типу головного фото
+            main_photo_type = ""
+            main_photo_id = vehicle.get('main_photo', '') or ""
+            if main_photo_id:
+                if isinstance(main_photo_id, str) and main_photo_id.startswith("video:"):
+                    main_photo_type = "Відео"
+                else:
+                    main_photo_type = "Фото"
             
             # Функція для безпечного перекладу
             def safe_translate(field_key: str, value: any) -> str:
@@ -178,7 +191,9 @@ class ExcelExporter:
                 vehicle.get('description', '') or "",
                 # Фото
                 photos_count,
-                vehicle.get('main_photo', '') or "",
+                main_photo_id,
+                main_photo_type,
+                photos_json,
                 # Статус та активність
                 safe_translate('status', vehicle.get('status')),  # ПЕРЕКЛАД
                 "Активне" if vehicle.get('is_active') else "Неактивне",
