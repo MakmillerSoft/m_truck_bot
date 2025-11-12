@@ -54,10 +54,10 @@ class ExcelExporter:
         """Експортувати користувачів"""
         ws = self.wb.create_sheet("Користувачі")
         
-        # Заголовки
+        # Заголовки - ВСІ поля з БД
         headers = [
-            "ID", "Telegram ID", "Ім'я", "Username", "Телефон", 
-            "Роль", "Заблокований", "Дата реєстрації", "Останній вхід"
+            "ID", "Telegram ID", "Ім'я", "Прізвище", "Username", "Телефон", 
+            "Роль", "Активний", "Верифікований", "Дата реєстрації", "Дата оновлення"
         ]
         ws.append(headers)
         
@@ -66,17 +66,19 @@ class ExcelExporter:
         logger.info(f"📊 Отримано {len(users)} користувачів з БД для експорту")
         
         for user in users:
-            # Безпечне отримання з словника
+            # Безпечне отримання з словника - ВСІ поля з БД
             ws.append([
                 user.get('id', ''),
                 user.get('telegram_id', ''),
-                user.get('first_name', '') or user.get('name', '') or "",
+                user.get('first_name', '') or "",
+                user.get('last_name', '') or "",
                 user.get('username', '') or "",
                 user.get('phone', '') or "",
                 user.get('role', '') or "",
-                "Так" if user.get('is_banned') or user.get('is_blocked') else "Ні",
+                "Так" if user.get('is_active') else "Ні",
+                "Так" if user.get('is_verified') else "Ні",
                 user.get('created_at', '') or "",
-                user.get('last_login', '') or ""
+                user.get('updated_at', '') or ""
             ])
         
         self._style_header(ws, len(headers))
@@ -196,10 +198,10 @@ class ExcelExporter:
         """Експортувати заявки"""
         ws = self.wb.create_sheet("Заявки")
         
-        # Заголовки (додано колонки для логування)
+        # Заголовки - ВСІ поля з БД
         headers = [
             "ID", "Користувач ID", "Авто ID", "Тип заявки", "Деталі", 
-            "Статус", "ID адміна", "Оброблено", "Створено", "Оновлено"
+            "Статус", "Створено", "Оновлено"
         ]
         ws.append(headers)
         
@@ -208,7 +210,7 @@ class ExcelExporter:
         logger.info(f"📊 Отримано {len(requests)} заявок з БД для експорту")
         
         for request in requests:
-            # request - це словник
+            # request - це словник - тільки реальні поля з БД
             ws.append([
                 request.get('id', ''),
                 request.get('user_id', ''),
@@ -216,8 +218,6 @@ class ExcelExporter:
                 request.get('request_type', ''),
                 request.get('details', ''),
                 request.get('status', ''),
-                request.get('processed_by_admin_id', ''),  # Новий стовпець
-                request.get('processed_at', ''),  # Новий стовпець
                 request.get('created_at', ''),
                 request.get('updated_at', '')
             ])
@@ -231,10 +231,11 @@ class ExcelExporter:
         """Експортувати розсилки"""
         ws = self.wb.create_sheet("Розсилки")
         
-        # Заголовки
+        # Заголовки - ВСІ поля з БД
         headers = [
             "ID", "Текст", "Кнопка (текст)", "Кнопка (URL)", 
-            "Тип медіа", "Статус", "Створено", "Заплановано"
+            "Тип медіа", "Media File ID", "Media Group ID", 
+            "Статус", "Період повтору", "Заплановано", "Створено"
         ]
         ws.append(headers)
         
@@ -243,7 +244,7 @@ class ExcelExporter:
         logger.info(f"📊 Отримано {len(broadcasts)} розсилок з БД для експорту")
         
         for broadcast in broadcasts:
-            # Безпечне отримання з словника
+            # Безпечне отримання з словника - ВСІ поля з БД
             text = broadcast.get('text', '') or ""
             text_short = (text[:50] + "...") if text and len(text) > 50 else text
             
@@ -253,9 +254,12 @@ class ExcelExporter:
                 broadcast.get('button_text', '') or "",
                 broadcast.get('button_url', '') or "",
                 broadcast.get('media_type', '') or "",
+                broadcast.get('media_file_id', '') or "",
+                broadcast.get('media_group_id', '') or "",
                 broadcast.get('status', '') or "",
-                broadcast.get('created_at', '') or "",
-                broadcast.get('scheduled_at', '') or ""
+                broadcast.get('schedule_period', '') or "",
+                broadcast.get('scheduled_at', '') or "",
+                broadcast.get('created_at', '') or ""
             ])
         
         self._style_header(ws, len(headers))
