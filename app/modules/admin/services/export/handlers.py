@@ -103,7 +103,7 @@ async def _export_data_base(
         exporter = ExcelExporter()
         export_func = getattr(exporter, export_method)
         await export_func()
-        await exporter.save(filename)
+        exporter.save(filename)
         
         # Відправляємо файл користувачу
         document = FSInputFile(filename)
