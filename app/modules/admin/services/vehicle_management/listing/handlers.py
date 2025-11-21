@@ -100,8 +100,15 @@ async def show_all_vehicles(callback: CallbackQuery, state: FSMContext):
             parse_mode="HTML"
         )
         
-        # Зберігаємо поточну сторінку та сортування в стані
-        await state.update_data(vehicles_page=1, vehicles_sort="created_at_desc", vehicles_status_filter="all")
+        # Зберігаємо поточну сторінку, сортування та загальну кількість сторінок в стані
+        await state.update_data(
+            vehicles_page=1,
+            current_page=1,  # Для сумісності з navigate_vehicles_page
+            vehicles_sort="created_at_desc",
+            sort_by="created_at_desc",  # Для сумісності з navigate_vehicles_page
+            vehicles_status_filter="all",
+            total_pages=stats['total_pages']  # Зберігаємо загальну кількість сторінок
+        )
         
         logger.info(f"📋 Показано всі авто для користувача {callback.from_user.id}")
         
@@ -122,10 +129,15 @@ async def navigate_vehicles_page(callback: CallbackQuery, state: FSMContext):
         # Отримуємо номер сторінки з callback_data
         page = int(callback.data.replace("vehicles_page_", ""))
         
-        # Отримуємо дані з стану
+        # Отримуємо дані з стану (з fallback на альтернативні ключі для сумісності)
         state_data = await state.get_data()
-        total_pages = state_data.get('total_pages', 1)
-        sort_by = state_data.get('sort_by', 'created_at_asc')
+        
+        # Отримуємо сортування (спочатку пробуємо sort_by, потім vehicles_sort)
+        sort_by = state_data.get('sort_by') or state_data.get('vehicles_sort', 'created_at_desc')
+        
+        # Отримуємо статистику для актуальної кількості сторінок
+        stats = await get_vehicles_statistics()
+        total_pages = stats['total_pages']
         
         # Перевіряємо валідність сторінки
         if page < 1 or page > total_pages:
@@ -135,9 +147,6 @@ async def navigate_vehicles_page(callback: CallbackQuery, state: FSMContext):
         # Отримуємо авто для поточної сторінки
         offset = (page - 1) * settings.page_size
         vehicles = await db_manager.get_vehicles(limit=settings.page_size, offset=offset, sort_by=sort_by)
-        
-        # Отримуємо статистику для заголовка
-        stats = await get_vehicles_statistics()
         
         # Форматуємо текст
         stats_text = f"""📋 <b>Всі авто</b>
@@ -162,10 +171,16 @@ async def navigate_vehicles_page(callback: CallbackQuery, state: FSMContext):
             parse_mode="HTML"
         )
         
-        # Оновлюємо поточну сторінку в стані
-        await state.update_data(current_page=page)
+        # Оновлюємо поточну сторінку та загальну кількість сторінок в стані
+        await state.update_data(
+            current_page=page,
+            vehicles_page=page,  # Для сумісності з іншими функціями
+            total_pages=total_pages,
+            sort_by=sort_by,
+            vehicles_sort=sort_by  # Для сумісності з іншими функціями
+        )
         
-        logger.info(f"📄 Перехід на сторінку {page} для користувача {callback.from_user.id}")
+        logger.info(f"📄 Перехід на сторінку {page} з {total_pages} для користувача {callback.from_user.id}")
         
     except Exception as e:
         logger.error(f"❌ Помилка навігації по сторінках: {e}")
@@ -266,22 +281,23 @@ async def back_to_vehicles_list(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     
     try:
-        # Отримуємо поточну сторінку та сортування з стану
+        # Отримуємо поточну сторінку та сортування з стану (з fallback на альтернативні ключі)
         state_data = await state.get_data()
-        current_page = state_data.get('current_page', 1)
-        sort_by = state_data.get('sort_by', 'created_at_asc')
+        current_page = state_data.get('current_page') or state_data.get('vehicles_page', 1)
+        sort_by = state_data.get('sort_by') or state_data.get('vehicles_sort', 'created_at_desc')
         
-        # Якщо дані пагінації відсутні, скидаємо до першої сторінки
-        if not state_data.get('total_pages'):
-            logger.warning(f"⚠️ Дані пагінації відсутні, скидаємо до першої сторінки")
+        # Отримуємо статистику для актуальної кількості сторінок
+        stats = await get_vehicles_statistics()
+        total_pages = stats['total_pages']
+        
+        # Якщо поточна сторінка більша за загальну кількість, скидаємо до першої
+        if current_page > total_pages:
+            logger.warning(f"⚠️ Поточна сторінка {current_page} більша за загальну кількість {total_pages}, скидаємо до першої")
             current_page = 1
         
         # Отримуємо авто для поточної сторінки
         offset = (current_page - 1) * settings.page_size
         vehicles = await db_manager.get_vehicles(limit=settings.page_size, offset=offset, sort_by=sort_by)
-        
-        # Отримуємо статистику
-        stats = await get_vehicles_statistics()
         
         # Форматуємо текст
         stats_text = f"""📋 <b>Всі авто</b>
@@ -297,28 +313,30 @@ async def back_to_vehicles_list(callback: CallbackQuery, state: FSMContext):
         for i, (brand, count) in enumerate(stats['top_brands'][:5], 1):
             stats_text += f"{i}. <b>{brand}</b> - {count} авто\n"
         
-        stats_text += f"\n📄 <b>Сторінка {current_page} з {stats['total_pages']}</b>"
+        stats_text += f"\n📄 <b>Сторінка {current_page} з {total_pages}</b>"
         
         # Спробуємо редагувати повідомлення, якщо не вдається - відправимо нове
         try:
             await callback.message.edit_text(
                 stats_text,
-                reply_markup=get_vehicles_list_keyboard(vehicles, current_page=current_page, total_pages=stats['total_pages'], sort_by=sort_by),
+                reply_markup=get_vehicles_list_keyboard(vehicles, current_page=current_page, total_pages=total_pages, sort_by=sort_by),
                 parse_mode="HTML"
             )
         except Exception as edit_error:
             # Якщо не можемо редагувати (наприклад, повідомлення з фото), відправляємо нове
             await callback.message.answer(
                 stats_text,
-                reply_markup=get_vehicles_list_keyboard(vehicles, current_page=current_page, total_pages=stats['total_pages'], sort_by=sort_by),
+                reply_markup=get_vehicles_list_keyboard(vehicles, current_page=current_page, total_pages=total_pages, sort_by=sort_by),
                 parse_mode="HTML"
             )
         
-        # Зберігаємо дані пагінації в стані
+        # Зберігаємо дані пагінації в стані (зберігаємо обидва набори ключів для сумісності)
         await state.update_data(
             current_page=current_page,
-            total_pages=stats['total_pages'],
-            sort_by=sort_by
+            vehicles_page=current_page,  # Для сумісності з іншими функціями
+            total_pages=total_pages,
+            sort_by=sort_by,
+            vehicles_sort=sort_by  # Для сумісності з іншими функціями
         )
         
         logger.info(f"🔙 Повернення до списку авто на сторінку {current_page}")
