@@ -71,7 +71,7 @@ def format_group_vehicle_card(data: Dict[str, Any]) -> str:
     if engine_volume:
         engine_bits.append(f"{engine_volume} л")
     if power_hp:
-        engine_bits.append(f"{power_hp} к.с.")
+        engine_bits.append(f"{power_hp} кВт")
     if engine_bits:
         main_specs.append(f"• <b>Двигун:</b> {', '.join(engine_bits)}")
     if fuel_type:

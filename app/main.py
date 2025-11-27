@@ -82,6 +82,9 @@ async def main():
         await db_manager.init_database()
         logger.info("База даних ініціалізована")
 
+        # Додаткова очистка спадкових даних
+        await db_manager.cleanup_invalid_vehicle_data()
+
         # Інформація про FSM storage (без створення нового)
         storage_type = getattr(settings, "fsm_storage_type", "memory")
         logger.info(f"FSM Storage type configured: {storage_type}")

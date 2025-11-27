@@ -34,6 +34,12 @@ class DatabaseManager:
 
     def _process_vehicle_data(self, vehicle_data: dict) -> dict:
         """Обробити дані авто для Pydantic моделі"""
+        # Нормалізуємо службові значення, які могли зберегтися як текст
+        cleanup_tokens = {"", "[Очищено]", "Не вказано", "none", "None"}
+        for key, value in list(vehicle_data.items()):
+            if isinstance(value, str) and value.strip() in cleanup_tokens:
+                vehicle_data[key] = None
+
         # Обробляємо JSON поле photos
         if vehicle_data.get('photos'):
             try:
@@ -62,8 +68,64 @@ class DatabaseManager:
                 vehicle_data['sold_at'] = datetime.fromisoformat(vehicle_data['sold_at'])
             except:
                 vehicle_data['sold_at'] = None
+
+        # Конвертуємо числові поля до коректних типів
+        int_fields = [
+            'year',
+            'mileage',
+            'power_hp',
+            'load_capacity',
+            'total_weight',
+            'views_count',
+        ]
+        float_fields = ['engine_volume', 'price']
+
+        for field in int_fields:
+            value = vehicle_data.get(field)
+            if value is None:
+                continue
+            try:
+                vehicle_data[field] = int(value)
+            except (ValueError, TypeError):
+                vehicle_data[field] = None
+
+        for field in float_fields:
+            value = vehicle_data.get(field)
+            if value is None:
+                continue
+            try:
+                vehicle_data[field] = float(value)
+            except (ValueError, TypeError):
+                vehicle_data[field] = None
         
         return vehicle_data
+
+    async def cleanup_invalid_vehicle_data(self) -> None:
+        """Очистити старі текстові позначки на кшталт '[Очищено]' у числових полях."""
+        cleanup_tokens = ["", "[Очищено]", "Не вказано", "none", "None"]
+        columns = ["power_hp", "mileage", "engine_volume", "load_capacity", "total_weight", "year"]
+        placeholders = ", ".join("?" for _ in cleanup_tokens)
+        total_fixed = 0
+
+        async with aiosqlite.connect(self.db_path) as db:
+            for column in columns:
+                cursor = await db.execute(
+                    f"""
+                    UPDATE vehicles
+                    SET {column} = NULL
+                    WHERE {column} IS NOT NULL
+                      AND typeof({column}) = 'text'
+                      AND TRIM({column}) IN ({placeholders})
+                    """,
+                    cleanup_tokens,
+                )
+                total_fixed += cursor.rowcount or 0
+            await db.commit()
+
+        if total_fixed:
+            logger.info(f"🧹 Очищено {total_fixed} некоректних значень у таблиці vehicles")
+        else:
+            logger.info("🧹 Некоректних значень у таблиці vehicles не знайдено")
 
     async def init_database(self):
         """Ініціалізація бази даних та створення таблиць"""

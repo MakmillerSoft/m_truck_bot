@@ -37,7 +37,7 @@ def format_client_vehicle_card(vehicle: VehicleModel) -> Tuple[str, Optional[str
     if vehicle.engine_volume:
         engine_bits.append(f"{vehicle.engine_volume} л")
     if vehicle.power_hp:
-        engine_bits.append(f"{vehicle.power_hp} к.с.")
+        engine_bits.append(f"{vehicle.power_hp} кВт")
     if engine_bits:
         tech_specs.append(f"• <b>Двигун:</b> {', '.join(engine_bits)}")
     if vehicle.fuel_type:

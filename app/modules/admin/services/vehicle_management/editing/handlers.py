@@ -434,20 +434,37 @@ async def back_to_summary_card(callback: CallbackQuery, state: FSMContext):
             # Підготовлюємо дані для збереження в БД
             update_data = {}
             for field, (old_value, new_value) in changes.items():
-                if field == 'vehicle_type' and new_value:
-                    from app.modules.database.models import VehicleType
-                    # Перекладаємо з української на англійську для enum
-                    english_value = reverse_translate_field_value('vehicle_type', new_value)
-                    update_data[field] = VehicleType(english_value)
-                elif field == 'condition' and new_value:
-                    from app.modules.database.models import VehicleCondition
-                    # Перекладаємо з української на англійську для enum
-                    english_value = reverse_translate_field_value('condition', new_value)
-                    update_data[field] = VehicleCondition(english_value)
+                processed_value = new_value
+                
+                if isinstance(new_value, str) and new_value == "[Очищено]":
+                    # Порожнє значення після очищення
+                    if field == "photos":
+                        processed_value = []
+                    else:
+                        processed_value = None
+                elif new_value == "":
+                    processed_value = None
+                
+                if field == 'vehicle_type':
+                    if processed_value:
+                        from app.modules.database.models import VehicleType
+                        # Перекладаємо з української на англійську для enum
+                        english_value = reverse_translate_field_value('vehicle_type', processed_value)
+                        update_data[field] = VehicleType(english_value)
+                    else:
+                        update_data[field] = None
+                elif field == 'condition':
+                    if processed_value:
+                        from app.modules.database.models import VehicleCondition
+                        # Перекладаємо з української на англійську для enum
+                        english_value = reverse_translate_field_value('condition', processed_value)
+                        update_data[field] = VehicleCondition(english_value)
+                    else:
+                        update_data[field] = None
                 elif field == 'photos':
-                    update_data[field] = new_value
+                    update_data[field] = processed_value
                 else:
-                    update_data[field] = new_value
+                    update_data[field] = processed_value
             
             # Зберігаємо зміни в БД
             db_manager = DatabaseManager()

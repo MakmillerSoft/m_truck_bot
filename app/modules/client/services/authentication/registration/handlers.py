@@ -113,9 +113,16 @@ async def start_command(message: Message, state: FSMContext):
 
 # Інлайн переходи з головного меню
 @router.callback_query(F.data == "client_profile")
-async def go_to_profile(callback: CallbackQuery):
+async def go_to_profile(callback: CallbackQuery, state: FSMContext):
     """Перехід до профілю з інлайн-меню"""
     await callback.answer()
+    
+    if state:
+        try:
+            await state.clear()
+        except Exception:
+            pass
+    
     from app.modules.client.services.authentication.profile.handlers import (
         profile_command,
     )
@@ -176,9 +183,16 @@ async def go_to_help(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "client_back_to_main")
-async def client_back_to_main(callback: CallbackQuery):
+async def client_back_to_main(callback: CallbackQuery, state: FSMContext):
     """Повернення до головного інлайн-меню клієнта"""
     await callback.answer()
+    
+    # Скидаємо стан, щоб вийти з можливих режимів редагування
+    if state:
+        try:
+            await state.clear()
+        except Exception:
+            pass
     
     # Намагаємось edit, якщо не вийде - видаляємо та створюємо нове
     try:
@@ -199,6 +213,8 @@ async def client_back_to_main(callback: CallbackQuery):
             reply_markup=get_main_menu_inline_keyboard(),
             parse_mode=get_default_parse_mode(),
         )
+
+
 
 
 @router.callback_query(RegistrationStates.waiting_for_phone)

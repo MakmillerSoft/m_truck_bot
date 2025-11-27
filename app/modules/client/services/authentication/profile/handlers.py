@@ -9,7 +9,11 @@ from aiogram.fsm.context import FSMContext
 
 from app.modules.database.manager import db_manager
 from app.utils.formatting import get_default_parse_mode
-from .keyboards import get_profile_main_keyboard, get_edit_profile_keyboard
+from .keyboards import (
+    get_profile_main_keyboard,
+    get_edit_profile_keyboard,
+    get_back_to_profile_keyboard,
+)
 from .states import ProfileStates
 
 logger = logging.getLogger(__name__)
@@ -99,9 +103,11 @@ async def profile_command(message: Message):
 # ==================== РЕДАГУВАННЯ ПРОФІЛЮ ====================
 
 @profile_router.callback_query(F.data == "edit_profile")
-async def edit_profile_menu(callback: CallbackQuery):
+async def edit_profile_menu(callback: CallbackQuery, state: FSMContext):
     """Меню редагування профілю"""
     await callback.answer()
+    if state:
+        await state.clear()
     
     text = """
 ✏️ <b>Редагування профілю</b>
@@ -123,6 +129,8 @@ async def edit_profile_menu(callback: CallbackQuery):
 async def start_edit_first_name(callback: CallbackQuery, state: FSMContext):
     """Початок редагування імені"""
     await callback.answer()
+    if state:
+        await state.clear()
     await state.set_state(ProfileStates.waiting_for_first_name)
     
     text = """
@@ -132,6 +140,7 @@ async def start_edit_first_name(callback: CallbackQuery, state: FSMContext):
 """
     await callback.message.edit_text(
         text.strip(),
+        reply_markup=get_back_to_profile_keyboard(),
         parse_mode=get_default_parse_mode(),
     )
 
@@ -185,6 +194,8 @@ async def process_first_name(message: Message, state: FSMContext):
 async def start_edit_last_name(callback: CallbackQuery, state: FSMContext):
     """Початок редагування прізвища"""
     await callback.answer()
+    if state:
+        await state.clear()
     await state.set_state(ProfileStates.waiting_for_last_name)
     
     text = """
@@ -194,6 +205,7 @@ async def start_edit_last_name(callback: CallbackQuery, state: FSMContext):
 """
     await callback.message.edit_text(
         text.strip(),
+        reply_markup=get_back_to_profile_keyboard(),
         parse_mode=get_default_parse_mode(),
     )
 
@@ -247,6 +259,8 @@ async def process_last_name(message: Message, state: FSMContext):
 async def start_edit_phone(callback: CallbackQuery, state: FSMContext):
     """Початок редагування телефону"""
     await callback.answer()
+    if state:
+        await state.clear()
     await state.set_state(ProfileStates.waiting_for_phone)
     
     from app.modules.client.services.authentication.registration.keyboards import get_phone_keyboard
@@ -263,6 +277,7 @@ async def start_edit_phone(callback: CallbackQuery, state: FSMContext):
     # Редагуємо попереднє повідомлення
     await callback.message.edit_text(
         text.strip(),
+        reply_markup=get_back_to_profile_keyboard(),
         parse_mode=get_default_parse_mode(),
     )
     
@@ -371,14 +386,5 @@ async def process_phone_text(message: Message, state: FSMContext):
             reply_markup=get_profile_main_keyboard(),
             parse_mode=get_default_parse_mode(),
         )
-
-
-@profile_router.callback_query(F.data == "back_to_profile")
-async def back_to_profile(callback: CallbackQuery, state: FSMContext):
-    """Повернення до профілю"""
-    await callback.answer()
-    await state.clear()
-    await _render_profile(callback.from_user.id, callback.message)
-
 
 

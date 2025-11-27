@@ -121,7 +121,7 @@ def format_vehicle_characteristics(vehicle, main_photo=None) -> str:
         characteristics.append(f"<b>Об'єм двигуна:</b> {vehicle.engine_volume} л")
 
     if vehicle.power_hp and vehicle.power_hp > 0:
-        characteristics.append(f"<b>Потужність:</b> {vehicle.power_hp} к.с.")
+        characteristics.append(f"<b>Потужність:</b> {vehicle.power_hp} кВт")
 
     if vehicle.fuel_type:
         characteristics.append(f"<b>Тип палива:</b> {vehicle.fuel_type}")

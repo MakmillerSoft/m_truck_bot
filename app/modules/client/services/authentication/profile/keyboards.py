@@ -30,9 +30,18 @@ def get_edit_profile_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="👤 Прізвище", callback_data="edit_last_name"),
         ],
         [InlineKeyboardButton(text="📞 Телефон", callback_data="edit_phone")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_profile")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="client_profile")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_back_to_profile_keyboard() -> InlineKeyboardMarkup:
+    """Універсальна клавіатура для повернення до профілю"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="client_profile")]
+        ]
+    )
 
 
 

@@ -520,42 +520,10 @@ async def process_main_photo_edit(message: Message, state: FSMContext):
 @router.message(VehicleEditingStates.waiting_for_photos_edit)
 async def process_photos_edit(message: Message, state: FSMContext):
     """Обробити редагування фото"""
-    if message.text and (message.text.lower().strip() == "пропустити" or message.text.strip() == "⏭️ Пропустити"):
-        # Користувач хоче залишити поточні фото - не змінюємо їх
-        data = await state.get_data()
-        current_photos = data.get('photos', [])
-        
-        class FakeCallback:
-            def __init__(self, message):
-                self.message = message
-                self.from_user = message.from_user
-        
-        fake_callback = FakeCallback(message)
-        # Залишаємо поточні фото без змін
-        await process_field_edit(fake_callback, state, "photos", current_photos)
-        return
-    
-    if message.photo:
-        # Перевіряємо, чи це медіа-група (як в створенні авто)
-        from ..creation.photo_group_processor import process_media_group_photos
-        
-        if await process_media_group_photos(message, state):
-            # Фото оброблено як медіа-група
-            return
-        
-        # Якщо не медіа-група, обробляємо як одиночне фото
-        new_photos = [photo.file_id for photo in message.photo]
-        
-        class FakeCallback:
-            def __init__(self, message):
-                self.message = message
-                self.from_user = message.from_user
-        
-        fake_callback = FakeCallback(message)
-        # Зберігаємо оригінальні file_id, а не текст
-        await process_field_edit(fake_callback, state, "photos", new_photos)
-    else:
-        await message.answer("❌ Надішліть фото або напишіть 'пропустити'")
+    # Використовуємо ту ж логіку, що й для повної заміни фото,
+    # аби підтримати медіагрупи та очистку через існуючі обробники
+    await state.set_state(VehicleEditingStates.waiting_for_replace_photos)
+    await process_replace_photos(message, state)
 
 
 @router.message(VehicleEditingStates.waiting_for_add_photos)
