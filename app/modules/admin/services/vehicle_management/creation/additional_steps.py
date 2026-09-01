@@ -604,6 +604,14 @@ async def process_group_photos_input(message: Message, state: FSMContext):
         data = await state.get_data()
         group_photos = data.get('group_photos', [])
         
+        # Telegram обмежує медіагрупи до 10 елементів
+        MAX_MEDIA_GROUP_SIZE = 10
+        
+        # Перевіряємо ліміт перед додаванням
+        if len(group_photos) >= MAX_MEDIA_GROUP_SIZE:
+            await message.answer(f"⚠️ Досягнуто максимум {MAX_MEDIA_GROUP_SIZE} фото. Видаліть частину фото перед додаванням нових.")
+            return
+        
         # Додаємо нове фото
         group_photos.append(file_id)
         await state.update_data(group_photos=group_photos)
@@ -625,7 +633,7 @@ async def process_group_photos_input(message: Message, state: FSMContext):
         await state.set_state(VehicleCreationStates.waiting_for_additional_group_photos)
         
         # Використовуємо клавіатуру з кнопкою "Додати ще"
-        keyboard = get_photos_summary_keyboard()
+        keyboard = get_photos_summary_keyboard(count)
         
         # Відправляємо повідомлення з ГОЛОВНИМ фото і текстом як підписом
         main_photo = (await state.get_data()).get('main_photo')
@@ -730,6 +738,14 @@ async def process_additional_group_photos_input(message: Message, state: FSMCont
         data = await state.get_data()
         group_photos = data.get('group_photos', [])
         
+        # Telegram обмежує медіагрупи до 10 елементів
+        MAX_MEDIA_GROUP_SIZE = 10
+        
+        # Перевіряємо ліміт перед додаванням
+        if len(group_photos) >= MAX_MEDIA_GROUP_SIZE:
+            await message.answer(f"⚠️ Досягнуто максимум {MAX_MEDIA_GROUP_SIZE} фото. Видаліть частину фото перед додаванням нових.")
+            return
+        
         # Додаємо нове фото
         group_photos.append(file_id)
         await state.update_data(group_photos=group_photos)
@@ -748,7 +764,7 @@ async def process_additional_group_photos_input(message: Message, state: FSMCont
 """
         
         # Використовуємо клавіатуру з кнопкою "Додати ще"
-        keyboard = get_photos_summary_keyboard()
+        keyboard = get_photos_summary_keyboard(count)
         
         # Відправляємо повідомлення з ГОЛОВНИМ фото і текстом як підписом
         main_photo = (await state.get_data()).get('main_photo')
@@ -872,7 +888,7 @@ async def back_to_photos_summary(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         text,
-        reply_markup=get_photos_summary_keyboard(),
+        reply_markup=get_photos_summary_keyboard(count),
         parse_mode=get_default_parse_mode()
     )
     await state.set_state(VehicleCreationStates.waiting_for_additional_group_photos)

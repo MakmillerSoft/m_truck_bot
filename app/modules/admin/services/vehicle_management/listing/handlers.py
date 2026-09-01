@@ -393,7 +393,8 @@ async def edit_existing_vehicle(callback: CallbackQuery, state: FSMContext):
             'cargo_dimensions': vehicle.cargo_dimensions,
             'location': vehicle.location,
             'description': vehicle.description,
-            'photos': vehicle.photos,
+            'photos': vehicle.photos or [],
+            'main_photo': vehicle.main_photo,
             'editing_changes': {},  # Ініціалізуємо зміни
             'editing_mode': 'existing',  # Позначаємо що це редагування існуючого авто
             # Зберігаємо дані пагінації

@@ -75,16 +75,26 @@ def get_editing_menu_keyboard(vehicle_data: Dict[str, Any], changes: Optional[Di
     
     # Фото для групи (особливий випадок) - показуємо завжди
     photos = vehicle_data.get('photos', [])
-    if photos:
+    # Правильно обробляємо photos - може бути список, порожній список, або None
+    if isinstance(photos, list) and len(photos) > 0:
+        photos_count = len(photos)
         if changes and 'photos' in changes:
             old_count, new_count = changes['photos']
+            # Якщо new_count - це список, беремо його довжину
+            if isinstance(new_count, list):
+                new_count = len(new_count)
             button_text = f"📷 Фото для групи: {new_count} шт. (було: {old_count})"
         else:
-            button_text = f"📷 Фото для групи: {len(photos)} шт."
+            button_text = f"📷 Фото для групи: {photos_count} шт."
     else:
         # Немає фото - показуємо як "Не вказано"
         if changes and 'photos' in changes:
             old_count, new_count = changes['photos']
+            # Якщо new_count - це список, беремо його довжину
+            if isinstance(new_count, list):
+                new_count = len(new_count)
+            if isinstance(old_count, list):
+                old_count = len(old_count)
             button_text = f"📷 Фото для групи: {new_count} шт. (було: {old_count})"
         else:
             button_text = "📷 Фото для групи: [Не вказано]"
@@ -96,7 +106,8 @@ def get_editing_menu_keyboard(vehicle_data: Dict[str, Any], changes: Optional[Di
     
     # Головне фото (особливий випадок) - показуємо завжди
     main_photo = vehicle_data.get('main_photo')
-    if main_photo:
+    # Правильно обробляємо main_photo - може бути рядок, порожній рядок, або None
+    if main_photo and str(main_photo).strip():
         if changes and 'main_photo' in changes:
             old_value, new_value = changes['main_photo']
             button_text = f"🖼️ Головне фото: додано (було: {'додано' if old_value else 'не вказано'})"
@@ -219,9 +230,16 @@ def get_field_editing_keyboard(field_name: str, current_value: str) -> InlineKey
             ]
         )
     elif field_name == "main_photo":
+        # Головне фото - обов'язкове поле, тільки заміна, без очищення
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=f"🗑️ Очистити {display_name}", callback_data=f"clear_field_{field_name}")],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_editing_menu")]
+            ]
+        )
+    elif field_name == "photos":
+        # Фото для групи - обов'язкове поле, тільки заміна, без очищення
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
                 [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_editing_menu")]
             ]
         )

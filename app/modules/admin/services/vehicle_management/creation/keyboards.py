@@ -223,15 +223,27 @@ def get_photos_input_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def get_photos_summary_keyboard() -> InlineKeyboardMarkup:
-    """Клавіатура після завантаження фото з кнопкою 'Додати ще'"""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="➕ Додати ще", callback_data="add_more_photos")],
-            [InlineKeyboardButton(text="✅ Завершити", callback_data="finish_vehicle_creation")],
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_description")]
-        ]
-    )
+def get_photos_summary_keyboard(current_count: int = 0) -> InlineKeyboardMarkup:
+    """Клавіатура після завантаження фото з кнопкою 'Додати ще'
+    
+    Args:
+        current_count: Поточна кількість фото
+    """
+    MAX_MEDIA_GROUP_SIZE = 10
+    buttons = []
+    
+    # Показуємо кнопку "Додати ще" тільки якщо менше 10 фото
+    if current_count < MAX_MEDIA_GROUP_SIZE:
+        remaining = MAX_MEDIA_GROUP_SIZE - current_count
+        buttons.append([InlineKeyboardButton(
+            text=f"➕ Додати ще (залишилось {remaining})", 
+            callback_data="add_more_photos"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="✅ Завершити", callback_data="finish_vehicle_creation")])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_description")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_additional_photos_keyboard() -> InlineKeyboardMarkup:

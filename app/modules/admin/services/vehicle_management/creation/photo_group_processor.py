@@ -69,6 +69,15 @@ async def process_media_group_photos(
                 process_group_after_delay(media_group_id, 2.5)
             )
 
+        # Telegram обмежує медіагрупи до 10 елементів
+        MAX_MEDIA_GROUP_SIZE = 10
+        
+        # Перевіряємо, чи не перевищено ліміт
+        current_count = len(media_groups[media_group_id]['photos'])
+        if current_count >= MAX_MEDIA_GROUP_SIZE:
+            logger.warning(f"⚠️ Медіагрупа {media_group_id} вже містить {current_count} фото (ліміт {MAX_MEDIA_GROUP_SIZE}), ігноруємо додаткові")
+            return True  # Повертаємо True, щоб не обробляти як одиночне фото
+        
         # Додаємо фото до групи
         if message.photo:
             photo = max(message.photo, key=lambda p: p.file_size)
@@ -77,7 +86,7 @@ async def process_media_group_photos(
             media_groups[media_group_id]['photos'].append(f"video:{message.video.file_id}")
         media_groups[media_group_id]['processed_count'] += 1
 
-        logger.info(f"📷 process_media_group_photos: додано фото {media_groups[media_group_id]['processed_count']} до групи {media_group_id}")
+        logger.info(f"📷 process_media_group_photos: додано фото {media_groups[media_group_id]['processed_count']} до групи {media_group_id} (всього: {len(media_groups[media_group_id]['photos'])})")
 
         return True
 
@@ -124,8 +133,22 @@ async def process_group_after_delay(media_group_id: str, delay: float):
         current_data = await state.get_data()
         existing_photos = current_data.get('group_photos', [])
 
+        # Telegram обмежує медіагрупи до 10 елементів
+        MAX_MEDIA_GROUP_SIZE = 10
+        
+        # Обмежуємо нові фото до ліміту
+        if len(photos) > MAX_MEDIA_GROUP_SIZE:
+            logger.warning(f"⚠️ Медіагрупа містить {len(photos)} фото, обмежуємо до {MAX_MEDIA_GROUP_SIZE}")
+            photos = photos[:MAX_MEDIA_GROUP_SIZE]
+
         # Додаємо всі фото з групи (для публікації в групу Telegram)
         all_photos = existing_photos + photos
+        
+        # Перевіряємо загальний ліміт
+        if len(all_photos) > MAX_MEDIA_GROUP_SIZE:
+            logger.warning(f"⚠️ Загальна кількість фото ({len(all_photos)}) перевищує ліміт, обмежуємо до {MAX_MEDIA_GROUP_SIZE}")
+            all_photos = all_photos[:MAX_MEDIA_GROUP_SIZE]
+        
         await state.update_data(group_photos=all_photos)
         
         logger.info(f"📷 process_group_after_delay: існуючі фото: {len(existing_photos)}, нові фото: {len(photos)}, всього: {len(all_photos)}")
@@ -167,10 +190,10 @@ async def process_group_after_delay(media_group_id: str, delay: float):
         if current_state == VehicleCreationStates.waiting_for_group_photos:
             # Перше завантаження фото - переходимо до стану підсумку
             await state.set_state(VehicleCreationStates.waiting_for_additional_group_photos)
-            keyboard = get_photos_summary_keyboard()
+            keyboard = get_photos_summary_keyboard(count)
         elif current_state == VehicleCreationStates.waiting_for_additional_group_photos:
             # Додаткові фото - залишаємося в тому ж стані
-            keyboard = get_photos_summary_keyboard()
+            keyboard = get_photos_summary_keyboard(count)
         else:
             # Перевіряємо, чи це стан редагування
             from ..editing.states import VehicleEditingStates

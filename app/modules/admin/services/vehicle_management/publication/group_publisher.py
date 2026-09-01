@@ -107,7 +107,16 @@ class GroupPublisher:
             return False, f"Помилка публікації: {str(e)}", 0
     
     def _create_media_group(self, photos: List[str], caption: str) -> List:
-        """Створення медіагрупи з фото/відео із збереженим префіксом video:."""
+        """Створення медіагрупи з фото/відео із збереженим префіксом video:.
+        Обмежуємо до 10 фото (ліміт Telegram для медіагруп)."""
+        # Telegram обмежує медіагрупи до 10 елементів
+        MAX_MEDIA_GROUP_SIZE = 10
+        
+        # Обмежуємо до ліміту перед обробкою
+        if len(photos) > MAX_MEDIA_GROUP_SIZE:
+            logger.warning(f"⚠️ Надто багато фото ({len(photos)}), обмежуємо до {MAX_MEDIA_GROUP_SIZE}")
+            photos = photos[:MAX_MEDIA_GROUP_SIZE]
+        
         media_group: List = []
         for i, raw_id in enumerate(photos):
             is_video = isinstance(raw_id, str) and raw_id.startswith("video:")

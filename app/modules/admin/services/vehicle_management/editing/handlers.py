@@ -123,6 +123,22 @@ async def edit_specific_field(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     current_value = data.get(field_name, "Не вказано")
     
+    # Спеціальна обробка для photos - показуємо кількість
+    if field_name == "photos":
+        if isinstance(current_value, list) and len(current_value) > 0:
+            current_value = f"{len(current_value)} шт."
+        elif not current_value or (isinstance(current_value, list) and len(current_value) == 0):
+            current_value = "Не вказано"
+        elif isinstance(current_value, str) and current_value.strip() == "":
+            current_value = "Не вказано"
+    
+    # Спеціальна обробка для main_photo - показуємо статус
+    if field_name == "main_photo":
+        if current_value and current_value != "Не вказано" and str(current_value).strip():
+            current_value = "додано"
+        else:
+            current_value = "Не вказано"
+    
     # Форматуємо текст для редагування поля
     field_display_names = {
         "vehicle_type": "типу авто",

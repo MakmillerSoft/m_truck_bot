@@ -82,7 +82,7 @@ class VehicleModel(BaseModel):
 
     # Двигун
     engine_volume: Optional[float] = None  # Об'єм двигуна в л
-    power_hp: Optional[int] = None  # Потужність в к.с.
+    power_hp: Optional[int] = None  # Потужність в кВт
     fuel_type: Optional[str] = None  # Тип палива
 
     # Трансмісія

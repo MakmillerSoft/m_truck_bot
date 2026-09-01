@@ -577,8 +577,26 @@ async def process_add_photos(message: Message, state: FSMContext):
                     'processed': False
                 }
             
-            # Перевіряємо, чи це не перше фото з групи ПЕРЕД додаванням
-            if len(process_add_photos._media_groups[media_group_id]['photos']) > 0:
+            # Telegram обмежує медіагрупи до 10 елементів
+            MAX_MEDIA_GROUP_SIZE = 10
+            current_group_photos = process_add_photos._media_groups[media_group_id]['photos']
+            
+            # Отримуємо поточні фото зі стану для перевірки загального ліміту
+            data = await state.get_data()
+            current_photos = data.get('photos', [])
+            if isinstance(current_photos, str):
+                current_photos = []
+            elif not isinstance(current_photos, list):
+                current_photos = []
+            
+            # Перевіряємо, чи не перше фото з групи ПЕРЕД додаванням
+            if len(current_group_photos) > 0:
+                # Перевіряємо загальний ліміт (поточні + нові)
+                total_after_add = len(current_photos) + len(current_group_photos) + 1
+                if total_after_add > MAX_MEDIA_GROUP_SIZE:
+                    logger.warning(f"⚠️ Загальна кількість фото ({total_after_add}) перевищить ліміт {MAX_MEDIA_GROUP_SIZE}, ігноруємо додаткові")
+                    await message.answer(f"⚠️ Максимум {MAX_MEDIA_GROUP_SIZE} фото. Можна додати ще {max(0, MAX_MEDIA_GROUP_SIZE - len(current_photos) - len(current_group_photos))} фото.")
+                    return
                 # Це не перше фото - просто додаємо і виходимо
                 process_add_photos._media_groups[media_group_id]['photos'].append(message.photo[-1].file_id)
                 logger.info(f"📷 process_add_photos: додано фото до медіа-групи {media_group_id}, всього: {len(process_add_photos._media_groups[media_group_id]['photos'])} (не обробляємо)")
@@ -668,8 +686,17 @@ async def process_replace_photos(message: Message, state: FSMContext):
                     'processed': False
                 }
             
-            # Перевіряємо, чи це не перше фото з групи ПЕРЕД додаванням
-            if len(process_replace_photos._media_groups[media_group_id]['photos']) > 0:
+            # Telegram обмежує медіагрупи до 10 елементів
+            MAX_MEDIA_GROUP_SIZE = 10
+            current_group_photos = process_replace_photos._media_groups[media_group_id]['photos']
+            
+            # Перевіряємо, чи не перше фото з групи ПЕРЕД додаванням
+            if len(current_group_photos) > 0:
+                # Перевіряємо ліміт
+                if len(current_group_photos) >= MAX_MEDIA_GROUP_SIZE:
+                    logger.warning(f"⚠️ Медіагрупа {media_group_id} вже містить {len(current_group_photos)} фото (ліміт {MAX_MEDIA_GROUP_SIZE}), ігноруємо додаткові")
+                    await message.answer(f"⚠️ Максимум {MAX_MEDIA_GROUP_SIZE} фото в медіагрупі. Додаткові фото ігноруються.")
+                    return
                 # Це не перше фото - просто додаємо і виходимо
                 process_replace_photos._media_groups[media_group_id]['photos'].append(message.photo[-1].file_id)
                 logger.info(f"🔄 process_replace_photos: додано фото до медіа-групи {media_group_id}, всього: {len(process_replace_photos._media_groups[media_group_id]['photos'])} (не обробляємо)")
@@ -733,6 +760,14 @@ async def process_media_group_after_delay(media_group_id: str, state: FSMContext
     new_photos = group_data['photos']
     user_id = group_data['user_id']
     
+    # Telegram обмежує медіагрупи до 10 елементів
+    MAX_MEDIA_GROUP_SIZE = 10
+    
+    # Обмежуємо до ліміту
+    if len(new_photos) > MAX_MEDIA_GROUP_SIZE:
+        logger.warning(f"⚠️ Медіагрупа містить {len(new_photos)} фото, обмежуємо до {MAX_MEDIA_GROUP_SIZE}")
+        new_photos = new_photos[:MAX_MEDIA_GROUP_SIZE]
+    
     logger.info(f"🔄 process_media_group_after_delay: обробляємо групу {media_group_id} з {len(new_photos)} фото")
     
     # ЗАМІНЮЄМО ВСІ ФОТО НОВИМИ (не додаємо до існуючих!)
@@ -775,6 +810,9 @@ async def process_add_photos_media_group_after_delay(media_group_id: str, state:
     new_photos = group_data['photos']
     user_id = group_data['user_id']
     
+    # Telegram обмежує медіагрупи до 10 елементів
+    MAX_MEDIA_GROUP_SIZE = 10
+    
     logger.info(f"📷 process_add_photos_media_group_after_delay: обробляємо групу {media_group_id} з {len(new_photos)} фото")
     
     # ДОДАЄМО НОВІ ФОТО ДО ІСНУЮЧИХ
@@ -786,6 +824,17 @@ async def process_add_photos_media_group_after_delay(media_group_id: str, state:
         current_photos = []
     elif not isinstance(current_photos, list):
         current_photos = []
+    
+    # Обмежуємо нові фото до доступного місця
+    available_slots = MAX_MEDIA_GROUP_SIZE - len(current_photos)
+    if available_slots <= 0:
+        logger.warning(f"⚠️ Досягнуто ліміт {MAX_MEDIA_GROUP_SIZE} фото, не додаємо нові")
+        await original_message.answer(f"⚠️ Досягнуто максимум {MAX_MEDIA_GROUP_SIZE} фото. Видаліть частину фото перед додаванням нових.")
+        return
+    
+    if len(new_photos) > available_slots:
+        logger.warning(f"⚠️ Намагаємося додати {len(new_photos)} фото, але доступно лише {available_slots} слотів")
+        new_photos = new_photos[:available_slots]
     
     all_photos = current_photos + new_photos
     

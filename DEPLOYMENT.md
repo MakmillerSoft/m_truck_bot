@@ -265,7 +265,7 @@ systemctl is-enabled truck-bot
 
 ```bash
 # Знайти процес бота
-ps aux | grep python | grep truck
+'ps aux | grep python | grep truck'
 
 # Знайти всі Python процеси
 ps aux | grep python
